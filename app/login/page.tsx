@@ -122,7 +122,7 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-[800px] grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden border border-white/15 bg-white/10 backdrop-blur-2xl shadow-[0_0_80px_rgba(20,61,143,0.18)]">
         <div className="hidden lg:flex flex-col justify-between p-7 text-white border-r border-white/10">
           <div>
-            <div className="w-44 mb-6 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl p-3">
+            <div className="w-44 mb-6  p-3">
               <Image
                 src="/pixel-pluz-logo.svg"
                 alt="Pixel Pluz Logo"
