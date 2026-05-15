@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { Eye, EyeOff } from "lucide-react"
 
 type UserRole = "student" | "mentor" | "admin"
 
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [role, setRole] = useState<UserRole>("student")
   const [email, setEmail] = useState("student@getskill.com")
   const [password, setPassword] = useState("123456")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
 
   const demoUsers = {
@@ -117,20 +119,20 @@ export default function LoginPage() {
         })}
       </div>
 
-      <div className="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden border border-white/15 bg-white/10 backdrop-blur-2xl shadow-[0_0_80px_rgba(20,61,143,0.18)]">
-        <div className="hidden lg:flex flex-col justify-between p-10 text-white border-r border-white/10">
+      <div className="relative z-10 w-full max-w-[800px] grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden border border-white/15 bg-white/10 backdrop-blur-2xl shadow-[0_0_80px_rgba(20,61,143,0.18)]">
+        <div className="hidden lg:flex flex-col justify-between p-7 text-white border-r border-white/10">
           <div>
-            <div className="w-52 mb-10 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl p-4">
+            <div className="w-44 mb-6 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl p-3">
               <Image
                 src="/pixel-pluz-logo.svg"
                 alt="Pixel Pluz Logo"
-                width={180}
-                height={70}
+                width={150}
+                height={55}
                 priority
               />
             </div>
 
-            <h1 className="text-4xl font-bold leading-tight mb-5">
+            <h1 className="text-3xl font-bold leading-tight mb-4">
               GetSkill Student Portal
             </h1>
 
@@ -140,23 +142,10 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-2xl font-bold text-[#4f8cff]">03</p>
-              <p className="text-xs text-white/60 mt-1">Roles</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-2xl font-bold text-[#4f8cff]">24/7</p>
-              <p className="text-xs text-white/60 mt-1">Access</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-2xl font-bold text-[#4f8cff]">MVP</p>
-              <p className="text-xs text-white/60 mt-1">Demo</p>
-            </div>
-          </div>
+
         </div>
 
-        <div className="p-8 sm:p-12">
+        <div className="p-6 sm:p-8">
           <div className="lg:hidden mb-8">
             <Image
               src="/pixel-pluz-logo.svg"
@@ -230,19 +219,34 @@ export default function LoginPage() {
                 placeholder="Enter email"
               />
             </div>
+<div>
+  <label className="block text-sm font-medium text-white/70 mb-2">
+    Password
+  </label>
 
-            <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-[#143d8f] focus:ring-2 focus:ring-[#143d8f]/20"
-                placeholder="Enter password"
-              />
-            </div>
+  <div className="relative">
+    <input
+      type={showPassword ? "text" : "password"}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 pr-12 text-white outline-none placeholder:text-white/30 focus:border-[#143d8f] focus:ring-2 focus:ring-[#143d8f]/20"
+      placeholder="Enter password"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 transition hover:text-white"
+      aria-label={showPassword ? "Hide password" : "Show password"}
+    >
+      {showPassword ? (
+        <EyeOff size={20} strokeWidth={2} />
+      ) : (
+        <Eye size={20} strokeWidth={2} />
+      )}
+    </button>
+  </div>
+</div>
 
             {error && (
               <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300">
