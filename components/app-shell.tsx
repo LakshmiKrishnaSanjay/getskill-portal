@@ -38,6 +38,7 @@ import {
   GraduationCap,
   UserCog,
   Shield,
+  UserCheck,
 } from 'lucide-react'
 import type { Role } from '@/lib/types'
 
@@ -97,6 +98,12 @@ const navigation: NavItem[] = [
     icon: Users,
     roles: ['admin', 'mentor'],
   },
+  {
+  title: 'Mentors',
+  href: '/mentors',
+  icon: UserCheck,
+  roles: ['admin'],
+},
   {
     title: 'Cohorts',
     href: '/cohorts',

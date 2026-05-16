@@ -1,26 +1,19 @@
 'use client'
 
-import { use } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
-import { useData } from '@/lib/data-context'
 import { useApp } from '@/lib/app-context'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import {
-  getAttendanceRate,
-  getAttendanceStreak,
-  getInternshipEligibility,
-} from '@/lib/attendance-data'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import {
   ArrowLeft,
-  Github,
-  Linkedin,
-  Globe,
   CalendarCheck,
   CheckCircle2,
   AlertTriangle,
@@ -28,14 +21,64 @@ import {
   FileText,
   ListTodo,
   Award,
+  Github,
+  Globe,
 } from 'lucide-react'
-import Link from 'next/link'
-import { useMemo } from 'react'
 
-const STATUS_COLORS: Record<string, string> = {
-  present: 'bg-green-500',
-  late: 'bg-yellow-500',
-  absent: 'bg-red-500',
+type Student = {
+  id: string
+  student_code: string
+  phone: string | null
+  status: string
+  joining_date: string | null
+  profile_picture_url: string | null
+  cohort_id: string
+  profiles: {
+    full_name: string
+    email: string
+  } | null
+  cohorts: {
+    name: string
+    cohort_code: string | null
+  } | null
+}
+
+type AttendanceRecord = {
+  id: string
+  attendance_date: string
+  status: string
+  notes: string | null
+}
+
+type Task = {
+  id: string
+  title: string
+  description: string | null
+  priority: string
+  status: string
+  due_date: string | null
+  created_at: string
+}
+
+type Submission = {
+  id: string
+  task_id: string
+  submission_text: string | null
+  file_url: string | null
+  github_url: string | null
+  live_url: string | null
+  status: string
+  submitted_at: string | null
+  created_at: string
+  tasks: {
+    title: string
+  } | null
+  reviews: {
+    score: number | null
+    feedback: string | null
+    status: string
+    reviewed_at: string | null
+  }[]
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -44,138 +87,275 @@ const STATUS_STYLES: Record<string, string> = {
   absent: 'bg-red-500/10 text-red-400 border-red-500/20',
 }
 
-export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default function StudentProfilePage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const { id } = use(params)
   const { currentRole } = useApp()
-  const { users, tasks, submissions, reviews, attendanceRecords, sessions, cohorts, workstreams } = useData()
 
-  const student = users.find(u => u.id === id)
-  const cohort = cohorts.find(c => c.id === student?.cohortId)
+  const [student, setStudent] = useState<Student | null>(null)
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const studentTasks = useMemo(
-    () => tasks.filter(t => t.assignedTo === id),
-    [tasks, id],
-  )
+  const fetchStudentProfile = async () => {
+    setLoading(true)
+    setError('')
 
-  const studentSubmissions = useMemo(
-    () => submissions.filter(s => s.studentId === id),
-    [submissions, id],
-  )
+    const { data: studentData, error: studentError } = await supabase
+      .from('students')
+      .select(`
+        id,
+        student_code,
+        phone,
+        status,
+        joining_date,
+        profile_picture_url,
+        cohort_id,
+        profiles (
+          full_name,
+          email
+        ),
+        cohorts (
+          name,
+          cohort_code
+        )
+      `)
+      .eq('id', id)
+      .single()
 
-  const studentRecords = useMemo(
-    () => attendanceRecords
-      .filter(r => r.studentId === id)
-      .sort((a, b) => b.date.localeCompare(a.date)),
-    [attendanceRecords, id],
-  )
+    if (studentError || !studentData) {
+      setError('Student not found.')
+      setLoading(false)
+      return
+    }
 
-  const studentSessions = useMemo(
-    () => sessions.filter(s => s.cohortId === student?.cohortId).sort((a, b) => b.date.localeCompare(a.date)),
-    [sessions, student],
-  )
+    setStudent(studentData as Student)
 
-  const attendanceRate = useMemo(() => getAttendanceRate(id, attendanceRecords), [id, attendanceRecords])
-  const streak = useMemo(() => getAttendanceStreak(id, attendanceRecords), [id, attendanceRecords])
+    const { data: attendanceData } = await supabase
+      .from('attendance')
+      .select('id, attendance_date, status, notes')
+      .eq('student_id', id)
+      .order('attendance_date', { ascending: false })
 
-  const avgGrade = useMemo(() => {
-    const graded = studentSubmissions.filter(s => s.grade !== undefined)
-    if (graded.length === 0) return 0
-    return Math.round(graded.reduce((sum, s) => sum + (s.grade ?? 0), 0) / graded.length)
-  }, [studentSubmissions])
+    setAttendanceRecords(attendanceData || [])
 
-  const eligibility = getInternshipEligibility(attendanceRate, avgGrade)
+    const { data: taskData } = await supabase
+      .from('tasks')
+      .select('id, title, description, priority, status, due_date, created_at')
+      .eq('assigned_to', id)
+      .order('created_at', { ascending: false })
 
-  const taskCompletion = studentTasks.length > 0
-    ? Math.round((studentTasks.filter(t => t.status === 'completed').length / studentTasks.length) * 100)
-    : 0
+    setTasks(taskData || [])
 
-  if (!student) {
-    return (
-      <AppShell>
-        <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <p className="text-muted-foreground">Student not found.</p>
-          <Button asChild variant="outline">
-            <Link href="/analytics"><ArrowLeft className="mr-2 h-4 w-4" />Back</Link>
-          </Button>
-        </div>
-      </AppShell>
-    )
+    const { data: submissionData } = await supabase
+      .from('submissions')
+      .select(`
+        id,
+        task_id,
+        submission_text,
+        file_url,
+        github_url,
+        live_url,
+        status,
+        submitted_at,
+        created_at,
+        tasks (
+          title
+        ),
+        reviews (
+          score,
+          feedback,
+          status,
+          reviewed_at
+        )
+      `)
+      .eq('student_id', id)
+      .order('created_at', { ascending: false })
+
+    setSubmissions((submissionData || []) as Submission[])
+
+    setLoading(false)
   }
 
-  // Redirect students to their own dashboard for others' profiles
+  useEffect(() => {
+    fetchStudentProfile()
+  }, [id])
+
+  const attendanceRate = useMemo(() => {
+    if (attendanceRecords.length === 0) return 0
+
+    const attended = attendanceRecords.filter(
+      (record) => record.status === 'present' || record.status === 'late'
+    ).length
+
+    return Math.round((attended / attendanceRecords.length) * 100)
+  }, [attendanceRecords])
+
+  const streak = useMemo(() => {
+    let count = 0
+
+    for (const record of attendanceRecords) {
+      if (record.status === 'present' || record.status === 'late') {
+        count++
+      } else {
+        break
+      }
+    }
+
+    return count
+  }, [attendanceRecords])
+
+  const avgGrade = useMemo(() => {
+    const scores = submissions
+      .flatMap((submission) => submission.reviews || [])
+      .map((review) => review.score)
+      .filter((score): score is number => typeof score === 'number')
+
+    if (scores.length === 0) return 0
+
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+  }, [submissions])
+
+  const taskCompletion = useMemo(() => {
+    if (tasks.length === 0) return 0
+
+    const doneTasks = tasks.filter((task) => task.status === 'done').length
+
+    return Math.round((doneTasks / tasks.length) * 100)
+  }, [tasks])
+
+  const eligibility = {
+    eligible: attendanceRate >= 75 && avgGrade >= 60,
+  }
+
   if (currentRole === 'student') {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center py-16">
-          <p className="text-muted-foreground">You don't have permission to view other profiles.</p>
+          <p className="text-muted-foreground">
+            You do not have permission to view this profile.
+          </p>
         </div>
       </AppShell>
     )
   }
 
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          Loading student profile...
+        </div>
+      </AppShell>
+    )
+  }
+
+  if (error || !student) {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <p className="text-muted-foreground">{error || 'Student not found.'}</p>
+          <Button asChild variant="outline">
+            <Link href="/students">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Students
+            </Link>
+          </Button>
+        </div>
+      </AppShell>
+    )
+  }
+
+  const fullName = student.profiles?.full_name || 'No name'
+  const initials = fullName
+    .split(' ')
+    .map((name) => name[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
   return (
     <AppShell>
       <div className="flex flex-col gap-6 max-w-5xl">
-        {/* Back */}
         <div>
           <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-            <Link href="/analytics"><ArrowLeft className="mr-2 h-4 w-4" />All Students</Link>
+            <Link href="/students">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              All Students
+            </Link>
           </Button>
         </div>
 
-        {/* Profile header */}
-        <div className="flex items-start gap-5">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
           <Avatar className="h-20 w-20 shrink-0">
-            <AvatarImage src={student.avatar} />
+            <AvatarImage src={student.profile_picture_url || ''} />
             <AvatarFallback className="text-2xl">
-              {student.name.split(' ').map(n => n[0]).join('')}
+              {initials || 'ST'}
             </AvatarFallback>
           </Avatar>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold">{student.name}</h1>
-              <Badge variant="secondary">{cohort?.name ?? 'No Cohort'}</Badge>
+              <h1 className="text-2xl font-bold">{fullName}</h1>
+
+              <Badge variant="secondary">
+                {student.cohorts?.name || 'No Cohort'}
+              </Badge>
+
+              <Badge variant="outline">
+                {student.student_code}
+              </Badge>
+
               <Badge
                 variant="outline"
-                className={cn(eligibility.eligible ? 'border-green-500/30 text-green-400' : 'border-yellow-500/30 text-yellow-400')}
+                className={cn(
+                  eligibility.eligible
+                    ? 'border-green-500/30 text-green-400'
+                    : 'border-yellow-500/30 text-yellow-400'
+                )}
               >
                 {eligibility.eligible ? 'Internship Eligible' : 'Not Eligible'}
               </Badge>
             </div>
-            <p className="text-muted-foreground text-sm mt-1">{student.email}</p>
-            {student.bio && <p className="text-sm mt-2">{student.bio}</p>}
-            <div className="flex items-center gap-3 mt-3">
-              {student.githubUrl && (
-                <a href={student.githubUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
-                  <Github className="h-4 w-4" />
-                </a>
-              )}
-              {student.linkedinUrl && (
-                <a href={student.linkedinUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
-                  <Linkedin className="h-4 w-4" />
-                </a>
-              )}
-              {student.portfolioUrl && (
-                <a href={student.portfolioUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
-                  <Globe className="h-4 w-4" />
-                </a>
-              )}
-            </div>
+
+            <p className="text-muted-foreground text-sm mt-1">
+              {student.profiles?.email || 'No email'}
+            </p>
+
+            <p className="text-sm text-muted-foreground mt-1">
+              Phone: {student.phone || 'No phone'}
+            </p>
+
+            <p className="text-sm text-muted-foreground mt-1">
+              Joined: {student.joining_date || 'No joining date'}
+            </p>
           </div>
 
-          {/* Quick stats */}
           <div className="grid grid-cols-3 gap-3 shrink-0">
             <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
               <p className="text-xs text-muted-foreground">Attendance</p>
-              <p className={cn('text-xl font-bold mt-0.5', attendanceRate >= 75 ? 'text-green-400' : 'text-red-400')}>
+              <p
+                className={cn(
+                  'text-xl font-bold mt-0.5',
+                  attendanceRate >= 75 ? 'text-green-400' : 'text-red-400'
+                )}
+              >
                 {attendanceRate}%
               </p>
             </div>
+
             <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
               <p className="text-xs text-muted-foreground">Avg Grade</p>
-              <p className="text-xl font-bold mt-0.5">{avgGrade}%</p>
+              <p className="text-xl font-bold mt-0.5">
+                {avgGrade > 0 ? `${avgGrade}%` : '—'}
+              </p>
             </div>
+
             <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
               <p className="text-xs text-muted-foreground">Tasks Done</p>
               <p className="text-xl font-bold mt-0.5">{taskCompletion}%</p>
@@ -183,225 +363,281 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="attendance">
           <TabsList>
             <TabsTrigger value="attendance" className="gap-2">
               <CalendarCheck className="h-4 w-4" />
               Attendance
             </TabsTrigger>
+
             <TabsTrigger value="submissions" className="gap-2">
               <FileText className="h-4 w-4" />
               Submissions
             </TabsTrigger>
+
             <TabsTrigger value="tasks" className="gap-2">
               <ListTodo className="h-4 w-4" />
               Tasks
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Attendance Tab ─────────────────────────────────────── */}
           <TabsContent value="attendance" className="mt-4 space-y-4">
-            {/* Summary cards */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-xs text-muted-foreground">Attendance Rate</p>
-                  <p className={cn('text-2xl font-bold mt-1', attendanceRate >= 75 ? 'text-green-400' : 'text-red-400')}>
+                  <p
+                    className={cn(
+                      'text-2xl font-bold mt-1',
+                      attendanceRate >= 75 ? 'text-green-400' : 'text-red-400'
+                    )}
+                  >
                     {attendanceRate}%
                   </p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-xs text-muted-foreground">Current Streak</p>
                   <div className="flex items-center gap-1 mt-1">
-                    <Flame className={cn('h-5 w-5', streak > 0 ? 'text-orange-400' : 'text-muted-foreground')} />
+                    <Flame
+                      className={cn(
+                        'h-5 w-5',
+                        streak > 0 ? 'text-orange-400' : 'text-muted-foreground'
+                      )}
+                    />
                     <p className="text-2xl font-bold">{streak}</p>
                   </div>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-xs text-muted-foreground">Sessions Attended</p>
                   <p className="text-2xl font-bold mt-1">
-                    {studentRecords.filter(r => r.status !== 'absent').length}/{studentRecords.length}
+                    {
+                      attendanceRecords.filter(
+                        (record) => record.status !== 'absent'
+                      ).length
+                    }
+                    /{attendanceRecords.length}
                   </p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-xs text-muted-foreground">Absences</p>
                   <p className="text-2xl font-bold mt-1 text-red-400">
-                    {studentRecords.filter(r => r.status === 'absent').length}
+                    {
+                      attendanceRecords.filter(
+                        (record) => record.status === 'absent'
+                      ).length
+                    }
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Eligibility banner */}
-            <div className={cn(
-              'flex items-start gap-3 rounded-lg border px-4 py-3',
-              eligibility.attendanceOk
-                ? 'border-green-500/20 bg-green-500/5'
-                : 'border-yellow-500/20 bg-yellow-500/5',
-            )}>
-              {eligibility.attendanceOk
-                ? <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                : <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 shrink-0" />
-              }
-              <div>
-                <p className={cn('text-sm font-medium', eligibility.attendanceOk ? 'text-green-400' : 'text-yellow-400')}>
-                  {eligibility.attendanceOk
-                    ? 'Attendance eligibility met for internship and certificate'
-                    : 'Below 75% — internship placement and certificate at risk'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Minimum 75% required. Current: {attendanceRate}%.
-                </p>
-              </div>
-            </div>
-
-            {/* History table */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-semibold">Session History</CardTitle>
-                <CardDescription>All recorded sessions for {cohort?.name}</CardDescription>
+                <CardTitle>Attendance Progress</CardTitle>
               </CardHeader>
+
               <CardContent>
-                <div className="space-y-0">
-                  {/* Header row */}
-                  <div className="grid grid-cols-12 gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
-                    <span className="col-span-2">Date</span>
-                    <span className="col-span-4">Session</span>
-                    <span className="col-span-3">Topic</span>
-                    <span className="col-span-1">Status</span>
-                    <span className="col-span-2">Note</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Current Attendance</span>
+                    <span>{attendanceRate}%</span>
                   </div>
-
-                  {studentSessions.map(session => {
-                    const record = studentRecords.find(r => r.sessionId === session.id)
-                    const status = record?.status ?? 'absent'
-                    return (
-                      <div
-                        key={session.id}
-                        className="grid grid-cols-12 gap-3 items-center px-3 py-3 border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors"
-                      >
-                        <span className="col-span-2 text-sm text-muted-foreground">
-                          {new Date(session.date).toLocaleDateString('en', { day: '2-digit', month: 'short' })}
-                        </span>
-                        <span className="col-span-4 text-sm font-medium truncate">{session.title}</span>
-                        <span className="col-span-3 text-sm text-muted-foreground truncate">{session.topic}</span>
-                        <span className="col-span-1">
-                          {record ? (
-                            <span
-                              className={cn(
-                                'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize',
-                                STATUS_STYLES[status],
-                              )}
-                            >
-                              {status}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </span>
-                        <span className="col-span-2 text-xs text-muted-foreground truncate">
-                          {record?.note ?? '—'}
-                        </span>
-                      </div>
-                    )
-                  })}
-
-                  {studentSessions.length === 0 && (
-                    <div className="py-8 text-center text-sm text-muted-foreground">No sessions found</div>
-                  )}
+                  <Progress value={attendanceRate} />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum required attendance is 75%.
+                  </p>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          {/* ── Submissions Tab ────────────────────────────────────── */}
-          <TabsContent value="submissions" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-semibold">Submission History</CardTitle>
+                <CardTitle>Attendance Records</CardTitle>
               </CardHeader>
+
               <CardContent>
-                <div className="space-y-2">
-                  {studentSubmissions.map(sub => (
-                    <div
-                      key={sub.id}
-                      className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 hover:bg-accent/30 transition-colors"
-                    >
-                      <div>
-                        <p className="text-sm font-medium truncate max-w-xs">{sub.content.slice(0, 60)}…</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Submitted {new Date(sub.submittedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {sub.grade !== undefined && (
-                          <span className="text-sm font-medium">{sub.grade}%</span>
-                        )}
+                {attendanceRecords.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No attendance records found.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {attendanceRecords.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex items-center justify-between rounded-lg border px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">
+                            {record.attendance_date}
+                          </p>
+                          {record.notes && (
+                            <p className="text-xs text-muted-foreground">
+                              {record.notes}
+                            </p>
+                          )}
+                        </div>
+
                         <Badge
-                          variant={sub.status === 'approved' ? 'default' : sub.status === 'rejected' ? 'destructive' : 'secondary'}
-                          className="capitalize"
+                          variant="outline"
+                          className={cn(
+                            STATUS_STYLES[record.status] ||
+                              'bg-muted text-muted-foreground'
+                          )}
                         >
-                          {sub.status}
+                          {record.status}
                         </Badge>
                       </div>
-                    </div>
-                  ))}
-                  {studentSubmissions.length === 0 && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No submissions yet</p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* ── Tasks Tab ──────────────────────────────────────────── */}
-          <TabsContent value="tasks" className="mt-4">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold">Task Completion</CardTitle>
-                  <span className="text-sm text-muted-foreground">
-                    {studentTasks.filter(t => t.status === 'completed').length}/{studentTasks.length} completed
-                  </span>
-                </div>
-                <Progress value={taskCompletion} className="mt-2 h-1.5" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {studentTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{task.title}</p>
-                        {task.dueDate && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Due {new Date(task.dueDate).toLocaleDateString()}
+          <TabsContent value="submissions" className="mt-4 space-y-4">
+            {submissions.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  No submissions found.
+                </CardContent>
+              </Card>
+            ) : (
+              submissions.map((submission) => {
+                const latestReview = submission.reviews?.[0]
+
+                return (
+                  <Card key={submission.id}>
+                    <CardContent className="pt-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="font-semibold">
+                            {submission.tasks?.title || 'Untitled Task'}
+                          </h3>
+
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Status: {submission.status}
                           </p>
-                        )}
+
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Submitted:{' '}
+                            {submission.submitted_at || submission.created_at}
+                          </p>
+
+                          {submission.submission_text && (
+                            <p className="text-sm mt-3">
+                              {submission.submission_text}
+                            </p>
+                          )}
+
+                          <div className="flex gap-3 mt-3">
+                            {submission.github_url && (
+                              <a
+                                href={submission.github_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                              >
+                                <Github className="h-4 w-4" />
+                                GitHub
+                              </a>
+                            )}
+
+                            {submission.live_url && (
+                              <a
+                                href={submission.live_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                              >
+                                <Globe className="h-4 w-4" />
+                                Live
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <Badge variant="secondary">{submission.status}</Badge>
+
+                          {latestReview?.score !== null &&
+                            latestReview?.score !== undefined && (
+                              <p className="text-2xl font-bold mt-2">
+                                {latestReview.score}%
+                              </p>
+                            )}
+                        </div>
                       </div>
-                      <Badge
-                        variant={task.status === 'completed' ? 'default' : 'secondary'}
-                        className="capitalize"
-                      >
-                        {task.status}
-                      </Badge>
+
+                      {latestReview?.feedback && (
+                        <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Mentor Feedback
+                          </p>
+                          <p className="text-sm">{latestReview.feedback}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
+          </TabsContent>
+
+          <TabsContent value="tasks" className="mt-4 space-y-4">
+            {tasks.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  No tasks assigned.
+                </CardContent>
+              </Card>
+            ) : (
+              tasks.map((task) => (
+                <Card key={task.id}>
+                  <CardContent className="pt-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="font-semibold">{task.title}</h3>
+
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {task.description || 'No description'}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <Badge variant="secondary">{task.priority}</Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              task.status === 'done'
+                                ? 'border-green-500/30 text-green-400'
+                                : 'border-yellow-500/30 text-yellow-400'
+                            )}
+                          >
+                            {task.status}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Due Date</p>
+                        <p className="text-sm font-medium">
+                          {task.due_date || 'No due date'}
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                  {studentTasks.length === 0 && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No tasks assigned</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </TabsContent>
         </Tabs>
       </div>

@@ -4,6 +4,7 @@ import { useState } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 type UserRole = "student" | "mentor" | "admin"
 
@@ -46,21 +47,36 @@ export default function LoginPage() {
     setError("")
   }
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault()
+  setError("")
 
-    const selectedUser = demoUsers[role]
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
 
-    if (email !== selectedUser.email || password !== selectedUser.password) {
-      setError("Invalid email or password. Please use the demo credentials.")
-      return
-    }
-
-    localStorage.setItem("getskill-user", JSON.stringify(selectedUser))
-    localStorage.setItem("getskill-role", selectedUser.role)
-
-    router.push("/dashboard")
+  if (error) {
+    setError(error.message)
+    return
   }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", data.user.id)
+    .single()
+
+  if (profileError || !profile) {
+    setError("Profile not found. Please contact admin.")
+    return
+  }
+
+  localStorage.setItem("getskill-user", JSON.stringify(profile))
+  localStorage.setItem("getskill-role", profile.role)
+
+  router.push("/dashboard")
+}
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black flex items-center justify-center px-4">
