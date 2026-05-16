@@ -179,48 +179,10 @@ const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
             <h2 className="text-3xl font-bold text-white">
               Login to Portal
             </h2>
-            <p className="text-white/50 mt-2">
-              Select your role and enter demo credentials.
-            </p>
+
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <button
-              type="button"
-              onClick={() => handleRoleChange("student")}
-              className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                role === "student"
-                  ? "bg-[#143d8f] text-white border-[#143d8f] shadow-[0_0_20px_rgba(20,61,143,0.35)]"
-                  : "bg-white/5 text-white/70 border-white/10 hover:border-[#143d8f]"
-              }`}
-            >
-              Student
-            </button>
 
-            <button
-              type="button"
-              onClick={() => handleRoleChange("mentor")}
-              className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                role === "mentor"
-                  ? "bg-[#143d8f] text-white border-[#143d8f] shadow-[0_0_20px_rgba(20,61,143,0.35)]"
-                  : "bg-white/5 text-white/70 border-white/10 hover:border-[#143d8f]"
-              }`}
-            >
-              Mentor
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRoleChange("admin")}
-              className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                role === "admin"
-                  ? "bg-[#143d8f] text-white border-[#143d8f] shadow-[0_0_20px_rgba(20,61,143,0.35)]"
-                  : "bg-white/5 text-white/70 border-white/10 hover:border-[#143d8f]"
-              }`}
-            >
-              Admin
-            </button>
-          </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
