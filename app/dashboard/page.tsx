@@ -1,118 +1,676 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
-import { useApp } from '@/lib/app-context'
-import { useData } from '@/lib/data-context'
-import {
-  mockTasks,
-  mockSubmissions,
-  mockCohorts,
-  mockWorkstreams,
-  mockProjects,
-  mockUsers,
-  mockActivities,
-} from '@/lib/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import {
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  TrendingUp,
-  Users,
-  BookOpen,
-  Target,
-  ArrowRight,
-} from 'lucide-react'
-import Link from 'next/link'
 import { AttendanceCard } from '@/components/attendance-card'
 import { AttendanceManager } from '@/components/attendance-manager'
+import { supabase } from '@/lib/supabase'
+import type { Role } from '@/lib/types'
+import {
+  AlertCircle,
+  ArrowRight,
+  BookOpen,
+  CalendarCheck,
+  CheckCircle2,
+  Clock,
+  FileText,
+  GraduationCap,
+  ListTodo,
+  Star,
+  Target,
+  TrendingUp,
+  UserCheck,
+  Users,
+} from 'lucide-react'
+
+type Profile = {
+  id: string
+  full_name: string
+  email: string
+  role: Role
+  avatar_url: string | null
+}
+
+type CohortRow = {
+  id: string
+  name: string
+  cohort_code: string | null
+  status: string
+}
+
+type StudentRow = {
+  id: string
+  profile_id: string
+  cohort_id: string
+  student_code: string
+  status: string
+  profile_picture_url: string | null
+  profiles: {
+    full_name: string
+    email: string
+  } | null
+  cohorts: {
+    name: string
+    cohort_code: string | null
+  } | null
+}
+
+type MentorRow = {
+  id: string
+  profile_id: string
+  specialization: string | null
+  status: string
+  profile_picture_url: string | null
+  profiles?: {
+    full_name: string
+    email: string
+  } | null
+}
+
+type TaskRow = {
+  id: string
+  title: string
+  description: string | null
+  cohort_id: string
+  assigned_to: string | null
+  assigned_by: string
+  priority: string
+  status: string
+  due_date: string | null
+  created_at: string
+}
+
+type SubmissionRow = {
+  id: string
+  task_id: string
+  student_id: string
+  submission_text: string | null
+  status: string
+  submitted_at: string | null
+  created_at: string
+  tasks: {
+    title: string
+  } | null
+  students?: {
+    student_code: string
+    profiles: {
+      full_name: string
+      email: string
+    } | null
+  } | null
+  reviews?: {
+    score: number | null
+    status: string
+  }[]
+}
+
+type AttendanceRow = {
+  id: string
+  student_id: string
+  mentor_id: string
+  cohort_id: string
+  attendance_date: string
+  status: 'present' | 'late' | 'absent'
+}
+
+type AdminCounts = {
+  students: number
+  mentors: number
+  cohorts: number
+  tasks: number
+  submissions: number
+  admissions: number
+}
 
 export default function DashboardPage() {
-  const { currentUser, currentRole } = useApp()
-  const { tasks, submissions, notifications } = useData()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [student, setStudent] = useState<StudentRow | null>(null)
+  const [mentor, setMentor] = useState<MentorRow | null>(null)
 
-  // Calculate metrics based on role
-  const getMetrics = () => {
-    if (currentRole === 'student') {
-      const studentTasks = mockTasks.filter((t) => t.assignedTo === currentUser?.id)
-      const studentSubmissions = mockSubmissions.filter(
-        (s) => s.studentId === currentUser?.id
-      )
+  const [students, setStudents] = useState<StudentRow[]>([])
+  const [mentors, setMentors] = useState<MentorRow[]>([])
+  const [cohorts, setCohorts] = useState<CohortRow[]>([])
+  const [tasks, setTasks] = useState<TaskRow[]>([])
+  const [submissions, setSubmissions] = useState<SubmissionRow[]>([])
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([])
 
-      const completedTasks = studentTasks.filter((t) => t.status === 'completed').length
-      const totalTasks = studentTasks.length
-      const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
+  const [adminCounts, setAdminCounts] = useState<AdminCounts>({
+    students: 0,
+    mentors: 0,
+    cohorts: 0,
+    tasks: 0,
+    submissions: 0,
+    admissions: 0,
+  })
 
-      const approvedSubmissions = studentSubmissions.filter(
-        (s) => s.status === 'approved'
-      ).length
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-      const averageGrade =
-        studentSubmissions
-          .filter((s) => s.grade !== undefined)
-          .reduce((sum, s) => sum + (s.grade || 0), 0) /
-        studentSubmissions.filter((s) => s.grade !== undefined).length
+  const fetchCount = async (table: string) => {
+    const { count } = await supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true })
 
-      return {
-        tasksCompleted: completedTasks,
-        totalTasks,
-        completionRate,
-        pendingTasks: studentTasks.filter((t) => t.status === 'todo').length,
-        inProgressTasks: studentTasks.filter((t) => t.status === 'in-progress').length,
-        inReviewTasks: studentTasks.filter((t) => t.status === 'review').length,
-        submissionsApproved: approvedSubmissions,
-        totalSubmissions: studentSubmissions.length,
-        averageGrade: isNaN(averageGrade) ? 0 : averageGrade,
-      }
-    } else if (currentRole === 'mentor') {
-      const pendingReviews = mockSubmissions.filter(
-        (s) => s.status === 'submitted' && !s.reviewId
-      ).length
-
-      const completedReviews = mockSubmissions.filter(
-        (s) => s.status === 'approved' || s.status === 'revision-requested'
-      ).length
-
-      return {
-        pendingReviews,
-        completedReviews,
-        totalStudents: mockUsers.filter((u) => u.role === 'student').length,
-        activeWorkstreams: mockWorkstreams.length,
-      }
-    } else {
-      // admin
-      const activeCohorts = mockCohorts.filter((c) => c.status === 'active').length
-      const totalStudents = mockUsers.filter((u) => u.role === 'student').length
-      const totalMentors = mockUsers.filter((u) => u.role === 'mentor').length
-
-      return {
-        activeCohorts,
-        totalStudents,
-        totalMentors,
-        totalProjects: mockProjects.length,
-      }
-    }
+    return count || 0
   }
 
-  const metrics = getMetrics()
+  const isCompletedTask = (status: string) => {
+    return status === 'completed' || status === 'done'
+  }
+
+  const isInProgressTask = (status: string) => {
+    return status === 'in-progress' || status === 'in_progress'
+  }
+
+  const isReviewTask = (status: string) => {
+    return status === 'review' || status === 'in-review' || status === 'in_review'
+  }
+
+  const isTodoTask = (status: string) => {
+    return status === 'todo'
+  }
+
+  const isPendingSubmission = (status: string) => {
+    return status === 'submitted' || status === 'in-review' || status === 'in_review'
+  }
+
+  const isCompletedSubmission = (status: string) => {
+    return (
+      status === 'approved' ||
+      status === 'revision-requested' ||
+      status === 'revision_requested' ||
+      status === 'rejected'
+    )
+  }
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    setError('')
+
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !userData.user) {
+      setError('User not logged in.')
+      setLoading(false)
+      return
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, avatar_url')
+      .eq('id', userData.user.id)
+      .single()
+
+    if (profileError || !profileData) {
+      setError('Profile not found.')
+      setLoading(false)
+      return
+    }
+
+    const currentProfile = profileData as Profile
+    setProfile(currentProfile)
+
+    if (currentProfile.role === 'student') {
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select(`
+          id,
+          profile_id,
+          cohort_id,
+          student_code,
+          status,
+          profile_picture_url,
+          profiles (
+            full_name,
+            email
+          ),
+          cohorts (
+            name,
+            cohort_code
+          )
+        `)
+        .eq('profile_id', currentProfile.id)
+        .single()
+
+      if (studentError || !studentData) {
+        setError('Student record not found.')
+        setLoading(false)
+        return
+      }
+
+      const currentStudent = studentData as StudentRow
+      setStudent(currentStudent)
+
+      const [
+        { data: taskData },
+        { data: submissionData },
+        { data: attendanceData },
+      ] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select(`
+            id,
+            title,
+            description,
+            cohort_id,
+            assigned_to,
+            assigned_by,
+            priority,
+            status,
+            due_date,
+            created_at
+          `)
+          .eq('assigned_to', currentStudent.id)
+          .order('created_at', { ascending: false }),
+
+        supabase
+          .from('submissions')
+          .select(`
+            id,
+            task_id,
+            student_id,
+            submission_text,
+            status,
+            submitted_at,
+            created_at,
+            tasks (
+              title
+            ),
+            reviews (
+              score,
+              status
+            )
+          `)
+          .eq('student_id', currentStudent.id)
+          .order('created_at', { ascending: false }),
+
+        supabase
+          .from('attendance')
+          .select('id, student_id, mentor_id, cohort_id, attendance_date, status')
+          .eq('student_id', currentStudent.id)
+          .order('attendance_date', { ascending: false }),
+      ])
+
+      setTasks((taskData || []) as TaskRow[])
+      setSubmissions((submissionData || []) as SubmissionRow[])
+      setAttendance((attendanceData || []) as AttendanceRow[])
+    }
+
+    if (currentProfile.role === 'mentor') {
+      const { data: mentorData, error: mentorError } = await supabase
+        .from('mentors')
+        .select(`
+          id,
+          profile_id,
+          specialization,
+          status,
+          profile_picture_url
+        `)
+        .eq('profile_id', currentProfile.id)
+        .single()
+
+      if (mentorError || !mentorData) {
+        setError('Mentor record not found.')
+        setLoading(false)
+        return
+      }
+
+      const currentMentor = mentorData as MentorRow
+      setMentor(currentMentor)
+
+      const { data: assignedCohorts } = await supabase
+        .from('cohort_mentors')
+        .select(`
+          cohorts (
+            id,
+            name,
+            cohort_code,
+            status
+          )
+        `)
+        .eq('mentor_id', currentMentor.id)
+
+      const realCohorts =
+        assignedCohorts?.map((item: any) => item.cohorts).filter(Boolean) || []
+
+      setCohorts(realCohorts as CohortRow[])
+
+      const cohortIds = realCohorts.map((cohort: CohortRow) => cohort.id)
+
+      if (cohortIds.length > 0) {
+        const [
+          { data: studentData },
+          { data: taskData },
+          { data: attendanceData },
+        ] = await Promise.all([
+          supabase
+            .from('students')
+            .select(`
+              id,
+              profile_id,
+              cohort_id,
+              student_code,
+              status,
+              profile_picture_url,
+              profiles (
+                full_name,
+                email
+              ),
+              cohorts (
+                name,
+                cohort_code
+              )
+            `)
+            .in('cohort_id', cohortIds)
+            .order('created_at', { ascending: false }),
+
+          supabase
+            .from('tasks')
+            .select(`
+              id,
+              title,
+              description,
+              cohort_id,
+              assigned_to,
+              assigned_by,
+              priority,
+              status,
+              due_date,
+              created_at
+            `)
+            .in('cohort_id', cohortIds)
+            .order('created_at', { ascending: false }),
+
+          supabase
+            .from('attendance')
+            .select('id, student_id, mentor_id, cohort_id, attendance_date, status')
+            .in('cohort_id', cohortIds)
+            .order('attendance_date', { ascending: false }),
+        ])
+
+        const currentTasks = (taskData || []) as TaskRow[]
+        const taskIds = currentTasks.map((task) => task.id)
+
+        let submissionData: SubmissionRow[] = []
+
+        if (taskIds.length > 0) {
+          const { data } = await supabase
+            .from('submissions')
+            .select(`
+              id,
+              task_id,
+              student_id,
+              submission_text,
+              status,
+              submitted_at,
+              created_at,
+              tasks (
+                title
+              ),
+              students (
+                student_code,
+                profiles (
+                  full_name,
+                  email
+                )
+              ),
+              reviews (
+                score,
+                status
+              )
+            `)
+            .in('task_id', taskIds)
+            .order('created_at', { ascending: false })
+
+          submissionData = (data || []) as SubmissionRow[]
+        }
+
+        setStudents((studentData || []) as StudentRow[])
+        setTasks(currentTasks)
+        setSubmissions(submissionData)
+        setAttendance((attendanceData || []) as AttendanceRow[])
+      }
+    }
+
+    if (currentProfile.role === 'admin') {
+      const [
+        studentsCount,
+        mentorsCount,
+        cohortsCount,
+        tasksCount,
+        submissionsCount,
+        admissionsCount,
+      ] = await Promise.all([
+        fetchCount('students'),
+        fetchCount('mentors'),
+        fetchCount('cohorts'),
+        fetchCount('tasks'),
+        fetchCount('submissions'),
+        fetchCount('admissions'),
+      ])
+
+      setAdminCounts({
+        students: studentsCount,
+        mentors: mentorsCount,
+        cohorts: cohortsCount,
+        tasks: tasksCount,
+        submissions: submissionsCount,
+        admissions: admissionsCount,
+      })
+
+      const [
+        { data: cohortData },
+        { data: studentData },
+        { data: mentorData },
+        { data: taskData },
+        { data: submissionData },
+        { data: attendanceData },
+      ] = await Promise.all([
+        supabase
+          .from('cohorts')
+          .select('id, name, cohort_code, status')
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        supabase
+          .from('students')
+          .select(`
+            id,
+            profile_id,
+            cohort_id,
+            student_code,
+            status,
+            profile_picture_url,
+            profiles (
+              full_name,
+              email
+            ),
+            cohorts (
+              name,
+              cohort_code
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        supabase
+          .from('mentors')
+          .select(`
+            id,
+            profile_id,
+            specialization,
+            status,
+            profile_picture_url,
+            profiles (
+              full_name,
+              email
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        supabase
+          .from('tasks')
+          .select(`
+            id,
+            title,
+            description,
+            cohort_id,
+            assigned_to,
+            assigned_by,
+            priority,
+            status,
+            due_date,
+            created_at
+          `)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        supabase
+          .from('submissions')
+          .select(`
+            id,
+            task_id,
+            student_id,
+            submission_text,
+            status,
+            submitted_at,
+            created_at,
+            tasks (
+              title
+            ),
+            students (
+              student_code,
+              profiles (
+                full_name,
+                email
+              )
+            ),
+            reviews (
+              score,
+              status
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        supabase
+          .from('attendance')
+          .select('id, student_id, mentor_id, cohort_id, attendance_date, status')
+          .order('created_at', { ascending: false }),
+      ])
+
+      setCohorts((cohortData || []) as CohortRow[])
+      setStudents((studentData || []) as StudentRow[])
+      setMentors((mentorData || []) as MentorRow[])
+      setTasks((taskData || []) as TaskRow[])
+      setSubmissions((submissionData || []) as SubmissionRow[])
+      setAttendance((attendanceData || []) as AttendanceRow[])
+    }
+
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [])
+
+  const attendanceRate = useMemo(() => {
+    if (attendance.length === 0) return 0
+
+    const attended = attendance.filter(
+      (item) => item.status === 'present' || item.status === 'late'
+    ).length
+
+    return Math.round((attended / attendance.length) * 100)
+  }, [attendance])
+
+  const averageGrade = useMemo(() => {
+    const scores = submissions
+      .flatMap((submission) => submission.reviews || [])
+      .map((review) => review.score)
+      .filter((score): score is number => typeof score === 'number')
+
+    if (scores.length === 0) return 0
+
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+  }, [submissions])
+
+  const studentMetrics = useMemo(() => {
+    const completedTasks = tasks.filter((task) => isCompletedTask(task.status)).length
+    const inProgressTasks = tasks.filter((task) =>
+      isInProgressTask(task.status)
+    ).length
+    const inReviewTasks = tasks.filter((task) => isReviewTask(task.status)).length
+    const pendingTasks = tasks.filter((task) => isTodoTask(task.status)).length
+    const completionRate =
+      tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0
+
+    return {
+      completedTasks,
+      inProgressTasks,
+      inReviewTasks,
+      pendingTasks,
+      totalTasks: tasks.length,
+      completionRate,
+      approvedSubmissions: submissions.filter(
+        (submission) => submission.status === 'approved'
+      ).length,
+    }
+  }, [tasks, submissions])
+
+  const mentorMetrics = useMemo(() => {
+    return {
+      totalStudents: students.length,
+      assignedCohorts: cohorts.length,
+      activeTasks: tasks.filter((task) => !isCompletedTask(task.status)).length,
+      pendingReviews: submissions.filter((submission) =>
+        isPendingSubmission(submission.status)
+      ).length,
+      completedReviews: submissions.filter((submission) =>
+        isCompletedSubmission(submission.status)
+      ).length,
+      attendanceRate,
+    }
+  }, [students, cohorts, tasks, submissions, attendanceRate])
+
+  const firstName = profile?.full_name?.split(' ')[0] || 'User'
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          Loading dashboard...
+        </div>
+      </AppShell>
+    )
+  }
+
+  if (error || !profile) {
+    return (
+      <AppShell>
+        <div className="py-16 text-center text-sm text-red-500">
+          {error || 'Unable to load dashboard.'}
+        </div>
+      </AppShell>
+    )
+  }
 
   const renderStudentDashboard = () => (
     <>
-      {/* Welcome Section */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {currentUser?.name?.split(' ')[0]}!
-        </h1>
+        <h1 className="text-3xl font-bold mb-2">Welcome back, {firstName}!</h1>
         <p className="text-muted-foreground">
-          Here's an overview of your learning journey
+          Track your assigned tasks, submissions, grades, and attendance.
         </p>
       </div>
 
-      {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -121,11 +679,11 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics.tasksCompleted}/{metrics.totalTasks}
+              {studentMetrics.completedTasks}/{studentMetrics.totalTasks}
             </div>
-            <Progress value={metrics.completionRate} className="mt-2" />
+            <Progress value={studentMetrics.completionRate} className="mt-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {metrics.completionRate.toFixed(0)}% completion rate
+              {studentMetrics.completionRate}% completion rate
             </p>
           </CardContent>
         </Card>
@@ -136,9 +694,11 @@ export default function DashboardPage() {
             <Clock className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.inProgressTasks}</div>
+            <div className="text-2xl font-bold">
+              {studentMetrics.inProgressTasks}
+            </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {metrics.inReviewTasks} awaiting review
+              {studentMetrics.pendingTasks} pending, {studentMetrics.inReviewTasks} in review
             </p>
           </CardContent>
         </Card>
@@ -149,33 +709,31 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.averageGrade.toFixed(0)}%</div>
+            <div className="text-2xl font-bold">
+              {averageGrade > 0 ? `${averageGrade}%` : '—'}
+            </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {metrics.submissionsApproved} submissions approved
+              {studentMetrics.approvedSubmissions} approved submissions
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-            <AlertCircle className="h-4 w-4 text-orange-500" />
+            <CardTitle className="text-sm font-medium">Attendance</CardTitle>
+            <CalendarCheck className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.pendingTasks}</div>
-            <p className="text-xs text-muted-foreground mt-2">Tasks to start</p>
+            <div className="text-2xl font-bold">{attendanceRate}%</div>
+            <Progress value={attendanceRate} className="mt-2" />
+            <p className="text-xs text-muted-foreground mt-2">
+              Minimum 75% required
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Attendance */}
-      <div className="mb-6">
-        <AttendanceCard />
-      </div>
-
-      {/* Current Tasks & Recent Activity */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Current Tasks */}
+      <div className="grid gap-6 lg:grid-cols-2 mb-8">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -190,78 +748,73 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockTasks
-                .filter(
-                  (t) =>
-                    t.assignedTo === currentUser?.id &&
-                    (t.status === 'in-progress' || t.status === 'todo')
-                )
+              {tasks
+                .filter((task) => !isCompletedTask(task.status))
                 .slice(0, 5)
-                .map((task) => {
-                  const project = mockProjects.find((p) => p.id === task.projectId)
-                  return (
-                    <div
-                      key={task.id}
-                      className="flex items-start justify-between gap-4 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{task.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {project?.name}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={task.status === 'in-progress' ? 'default' : 'secondary'}
-                        className="shrink-0"
-                      >
-                        {task.status}
-                      </Badge>
+                .map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-start justify-between gap-4 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Due: {task.due_date || 'No due date'}
+                      </p>
                     </div>
-                  )
-                })}
-              {mockTasks.filter(
-                (t) =>
-                  t.assignedTo === currentUser?.id &&
-                  (t.status === 'in-progress' || t.status === 'todo')
-              ).length === 0 && (
+
+                    <Badge variant="secondary" className="shrink-0">
+                      {task.status}
+                    </Badge>
+                  </div>
+                ))}
+
+              {tasks.filter((task) => !isCompletedTask(task.status)).length === 0 && (
                 <div className="text-center py-8 text-sm text-muted-foreground">
-                  No active tasks. Great job!
+                  No active tasks.
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>Recent Submissions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockActivities
-                .filter((a) => a.userId === currentUser?.id)
-                .slice(0, 5)
-                .map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm">{activity.description}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(activity.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
+              {submissions.slice(0, 5).map((submission) => (
+                <div
+                  key={submission.id}
+                  className="flex items-start justify-between gap-4 rounded-lg border border-border p-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">
+                      {submission.tasks?.title || 'Submission'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {submission.submitted_at || submission.created_at}
+                    </p>
                   </div>
-                ))}
-              {mockActivities.filter((a) => a.userId === currentUser?.id).length === 0 && (
+
+                  <Badge variant="secondary" className="shrink-0">
+                    {submission.status}
+                  </Badge>
+                </div>
+              ))}
+
+              {submissions.length === 0 && (
                 <div className="text-center py-8 text-sm text-muted-foreground">
-                  No recent activity
+                  No submissions yet.
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <AttendanceCard />
     </>
   )
 
@@ -269,188 +822,70 @@ export default function DashboardPage() {
     <>
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Mentor Dashboard</h1>
-        <p className="text-muted-foreground">Review submissions and support students</p>
+        <p className="text-muted-foreground">
+          Manage your assigned cohorts, students, reviews, and attendance.
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Assigned Students</CardTitle>
+            <Users className="h-4 w-4 text-[#153E90]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{mentorMetrics.totalStudents}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Across {mentorMetrics.assignedCohorts} cohorts
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending Reviews</CardTitle>
-            <AlertCircle className="h-4 w-4 text-orange-500" />
+            <FileText className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.pendingReviews}</div>
-            <p className="text-xs text-muted-foreground mt-2">Submissions awaiting review</p>
+            <div className="text-2xl font-bold">{mentorMetrics.pendingReviews}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {mentorMetrics.completedReviews} completed reviews
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed Reviews</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
+            <Target className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.completedReviews}</div>
-            <p className="text-xs text-muted-foreground mt-2">All time</p>
+            <div className="text-2xl font-bold">{mentorMetrics.activeTasks}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {tasks.length} total tasks
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Students</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium">Attendance Rate</CardTitle>
+            <CalendarCheck className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.totalStudents}</div>
-            <p className="text-xs text-muted-foreground mt-2">Across all cohorts</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Workstreams</CardTitle>
-            <BookOpen className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.activeWorkstreams}</div>
-            <p className="text-xs text-muted-foreground mt-2">Active curricula</p>
+            <div className="text-2xl font-bold">{mentorMetrics.attendanceRate}%</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Assigned cohort average
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Attendance Manager */}
-      <div className="mb-6">
-        <AttendanceManager />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 mb-8">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Pending Submissions</CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/reviews">
-                  Review All
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockSubmissions
-                .filter((s) => s.status === 'submitted')
-                .slice(0, 5)
-                .map((submission) => {
-                  const student = mockUsers.find((u) => u.id === submission.studentId)
-                  const task = mockTasks.find((t) => t.id === submission.taskId)
-                  return (
-                    <div
-                      key={submission.id}
-                      className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
-                    >
-                      <Avatar className="h-10 w-10 shrink-0">
-                        <AvatarImage src={student?.avatar} />
-                        <AvatarFallback>
-                          {student?.name.split(' ').map((n) => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{task?.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{student?.name}</p>
-                      </div>
-                      <Badge variant="secondary" className="shrink-0">
-                        New
-                      </Badge>
-                    </div>
-                  )
-                })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Reviews</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockActivities.slice(0, 5).map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3">
-                  <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">{activity.description}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(activity.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </>
-  )
-
-  const renderAdminDashboard = () => (
-    <>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Manage cohorts, users, and platform analytics</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Cohorts</CardTitle>
-            <Target className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.activeCohorts}</div>
-            <p className="text-xs text-muted-foreground mt-2">Running programs</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-            <Users className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.totalStudents}</div>
-            <p className="text-xs text-muted-foreground mt-2">Active learners</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mentors</CardTitle>
-            <Users className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.totalMentors}</div>
-            <p className="text-xs text-muted-foreground mt-2">Active instructors</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Projects</CardTitle>
-            <BookOpen className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.totalProjects}</div>
-            <p className="text-xs text-muted-foreground mt-2">In curriculum</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Active Cohorts</CardTitle>
+              <CardTitle>Assigned Cohorts</CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/cohorts">
                   View All
@@ -461,63 +896,331 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockCohorts
-                .filter((c) => c.status === 'active')
-                .map((cohort) => (
-                  <div
-                    key={cohort.id}
-                    className="flex items-center justify-between rounded-lg border border-border p-3"
-                  >
-                    <div>
-                      <p className="font-medium text-sm">{cohort.name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {cohort.studentCount} students
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{cohort.status}</Badge>
+              {cohorts.map((cohort) => (
+                <div
+                  key={cohort.id}
+                  className="flex items-center justify-between rounded-lg border border-border p-3"
+                >
+                  <div>
+                    <p className="font-medium text-sm">{cohort.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {cohort.cohort_code || 'No code'}
+                    </p>
                   </div>
-                ))}
+
+                  <Badge variant="secondary">{cohort.status}</Badge>
+                </div>
+              ))}
+
+              {cohorts.length === 0 && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No cohorts assigned.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>System Activity</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Recent Submissions</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/submissions">
+                  View All
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockActivities.slice(0, 5).map((activity) => {
-                const user = mockUsers.find((u) => u.id === activity.userId)
+              {submissions.slice(0, 5).map((submission) => {
+                const studentName =
+                  submission.students?.profiles?.full_name ||
+                  submission.students?.student_code ||
+                  'Student'
+
+                const initials = studentName
+                  .split(' ')
+                  .map((item) => item[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+
                 return (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={user?.avatar} />
-                      <AvatarFallback>
-                        {user?.name.split(' ').map((n) => n[0]).join('')}
-                      </AvatarFallback>
+                  <div
+                    key={submission.id}
+                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-accent/50 transition-colors"
+                  >
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarFallback>{initials}</AvatarFallback>
                     </Avatar>
+
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm">{activity.description}</p>
+                      <p className="font-medium text-sm truncate">
+                        {submission.tasks?.title || 'Submission'}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(activity.createdAt).toLocaleDateString()}
+                        {studentName}
+                      </p>
+                    </div>
+
+                    <Badge variant="secondary" className="shrink-0">
+                      {submission.status}
+                    </Badge>
+                  </div>
+                )
+              })}
+
+              {submissions.length === 0 && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No submissions found.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <AttendanceManager />
+    </>
+  )
+
+  const renderAdminDashboard = () => (
+    <>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+        <p className="text-muted-foreground">
+          Manage cohorts, students, mentors, tasks, submissions, and attendance.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Cohorts</CardTitle>
+            <BookOpen className="h-4 w-4 text-[#153E90]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{adminCounts.cohorts}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Total batches created
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <GraduationCap className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{adminCounts.students}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Registered learners
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mentors</CardTitle>
+            <UserCheck className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{adminCounts.mentors}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Active instructors
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Submissions</CardTitle>
+            <FileText className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{adminCounts.submissions}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {adminCounts.tasks} total tasks
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3 mb-8">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Recent Cohorts</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/cohorts">
+                  View
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {cohorts.map((cohort) => (
+                <div key={cohort.id} className="rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-sm">{cohort.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {cohort.cohort_code || 'No code'}
+                      </p>
+                    </div>
+                    <Badge variant="secondary">{cohort.status}</Badge>
+                  </div>
+                </div>
+              ))}
+
+              {cohorts.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No cohorts found.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Recent Students</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/students">
+                  View
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {students.map((student) => {
+                const studentName = student.profiles?.full_name || student.student_code
+                const initials = studentName
+                  .split(' ')
+                  .map((item) => item[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+
+                return (
+                  <div
+                    key={student.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3"
+                  >
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarImage src={student.profile_picture_url || ''} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {studentName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {student.cohorts?.name || 'No cohort'} · {student.student_code}
                       </p>
                     </div>
                   </div>
                 )
               })}
+
+              {students.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No students found.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Recent Mentors</CardTitle>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/mentors">
+                  View
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {mentors.map((mentor) => {
+                const mentorName = mentor.profiles?.full_name || 'Mentor'
+                const initials = mentorName
+                  .split(' ')
+                  .map((item) => item[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+
+                return (
+                  <div
+                    key={mentor.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3"
+                  >
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarImage src={mentor.profile_picture_url || ''} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {mentorName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {mentor.specialization || 'No specialization'}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {mentors.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No mentors found.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <AttendanceManager />
     </>
   )
 
   return (
     <AppShell>
-      {currentRole === 'student' && renderStudentDashboard()}
-      {currentRole === 'mentor' && renderMentorDashboard()}
-      {currentRole === 'admin' && renderAdminDashboard()}
+      <div className="space-y-8">
+        {profile.role === 'student' && renderStudentDashboard()}
+        {profile.role === 'mentor' && renderMentorDashboard()}
+        {profile.role === 'admin' && renderAdminDashboard()}
+
+        {profile.role !== 'student' &&
+          profile.role !== 'mentor' &&
+          profile.role !== 'admin' && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <AlertCircle className="mx-auto mb-3 h-8 w-8 text-red-500" />
+                <p className="text-sm text-muted-foreground">
+                  Unknown role. Please contact admin.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+      </div>
     </AppShell>
   )
 }

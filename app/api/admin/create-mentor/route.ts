@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 
 export async function POST(request: Request) {
+  let createdUserId: string | null = null
+
   try {
     const formData = await request.formData()
 
@@ -38,6 +40,8 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user.id
+    createdUserId = userId
+
     let profilePictureUrl: string | null = null
 
     if (profileImage && profileImage.size > 0) {
@@ -52,6 +56,8 @@ export async function POST(request: Request) {
         })
 
       if (uploadError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId)
+
         return NextResponse.json(
           { error: uploadError.message },
           { status: 400 }
@@ -63,6 +69,22 @@ export async function POST(request: Request) {
         .getPublicUrl(filePath)
 
       profilePictureUrl = publicUrlData.publicUrl
+
+      const { error: profileAvatarError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          avatar_url: profilePictureUrl,
+        })
+        .eq("id", userId)
+
+      if (profileAvatarError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId)
+
+        return NextResponse.json(
+          { error: profileAvatarError.message },
+          { status: 400 }
+        )
+      }
     }
 
     const { data: mentorData, error: mentorError } = await supabaseAdmin
@@ -77,6 +99,8 @@ export async function POST(request: Request) {
       .single()
 
     if (mentorError || !mentorData) {
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+
       return NextResponse.json(
         { error: mentorError?.message || "Failed to create mentor row." },
         { status: 400 }
@@ -91,6 +115,8 @@ export async function POST(request: Request) {
       })
 
     if (assignError) {
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+
       return NextResponse.json(
         { error: assignError.message },
         { status: 400 }
@@ -101,7 +127,11 @@ export async function POST(request: Request) {
       success: true,
       message: "Mentor created successfully.",
     })
-  } catch {
+  } catch (error) {
+    if (createdUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(createdUserId)
+    }
+
     return NextResponse.json(
       { error: "Something went wrong while creating mentor." },
       { status: 500 }

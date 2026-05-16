@@ -1,16 +1,16 @@
 export type Role = 'student' | 'mentor' | 'admin'
 
-export type Status = 'active' | 'inactive' | 'completed' | 'archived'
+export type Status = 'active' | 'inactive' | 'done' | 'archived'
 
-export type TaskStatus = 'todo' | 'in-progress' | 'review' | 'completed'
+export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done'
 
-export type SubmissionStatus = 'draft' | 'submitted' | 'in-review' | 'approved' | 'revision-requested' | 'rejected'
+export type SubmissionStatus = 'draft' | 'submitted' | 'in-review' | 'approved' | 'revision_requested' | 'rejected'
 
-export type ReviewStatus = 'pending' | 'in-progress' | 'completed'
+export type ReviewStatus = 'pending' | 'in_progress' | 'done'
 
 export type ProjectStatus = 'live' | 'archived' | 'upcoming'
 
-export type DeliverableStatus = 'pending' | 'submitted' | 'approved' | 'revision-requested'
+export type DeliverableStatus = 'pending' | 'submitted' | 'approved' | 'revision_requested'
 
 export interface User {
   id: string
@@ -219,7 +219,7 @@ export interface Review {
   deliverableId?: string
   reviewerId: string
   status: ReviewStatus
-  decision?: 'approved' | 'revision-requested' | 'rejected'
+  decision?: 'approved' | 'revision_requested' | 'rejected'
   feedback: string
   strengths?: string[]
   improvements?: string[]

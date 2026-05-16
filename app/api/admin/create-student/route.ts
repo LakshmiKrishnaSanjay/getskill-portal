@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-admin"
 
 export async function POST(request: Request) {
+  let createdUserId: string | null = null
+
   try {
     const formData = await request.formData()
 
@@ -70,6 +72,8 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user.id
+    createdUserId = userId
+
     let profilePictureUrl: string | null = null
 
     if (profileImage && profileImage.size > 0) {
@@ -84,6 +88,8 @@ export async function POST(request: Request) {
         })
 
       if (uploadError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId)
+
         return NextResponse.json(
           { error: uploadError.message },
           { status: 400 }
@@ -95,6 +101,22 @@ export async function POST(request: Request) {
         .getPublicUrl(filePath)
 
       profilePictureUrl = publicUrlData.publicUrl
+
+      const { error: profileAvatarError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          avatar_url: profilePictureUrl,
+        })
+        .eq("id", userId)
+
+      if (profileAvatarError) {
+        await supabaseAdmin.auth.admin.deleteUser(userId)
+
+        return NextResponse.json(
+          { error: profileAvatarError.message },
+          { status: 400 }
+        )
+      }
     }
 
     const { error: studentError } = await supabaseAdmin.from("students").insert({
@@ -108,7 +130,12 @@ export async function POST(request: Request) {
     })
 
     if (studentError) {
-      return NextResponse.json({ error: studentError.message }, { status: 400 })
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+
+      return NextResponse.json(
+        { error: studentError.message },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({
@@ -117,6 +144,10 @@ export async function POST(request: Request) {
       studentCode,
     })
   } catch {
+    if (createdUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(createdUserId)
+    }
+
     return NextResponse.json(
       { error: "Something went wrong while creating student." },
       { status: 500 }
