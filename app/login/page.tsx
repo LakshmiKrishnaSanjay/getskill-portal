@@ -1,258 +1,178 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import Image from "next/image"
-import { useRouter } from "next/navigation"
-import { Eye, EyeOff } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-
-type UserRole = "student" | "mentor" | "admin"
+import { useState } from 'react'
+import Image from 'next/image'
+import { useRouter } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
 
-  const [role, setRole] = useState<UserRole>("student")
-  const [email, setEmail] = useState("student@getskill.com")
-  const [password, setPassword] = useState("123456")
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const demoUsers = {
-    student: {
-      email: "student@getskill.com",
-      password: "123456",
-      name: "Student User",
-      role: "student",
-    },
-    mentor: {
-      email: "mentor@getskill.com",
-      password: "123456",
-      name: "Mentor User",
-      role: "mentor",
-    },
-    admin: {
-      email: "admin@getskill.com",
-      password: "123456",
-      name: "Admin User",
-      role: "admin",
-    },
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, avatar_url')
+      .eq('id', data.user.id)
+      .single()
+
+    if (profileError || !profile) {
+      setError('Profile not found. Please contact admin.')
+      setLoading(false)
+      return
+    }
+
+    localStorage.setItem('getskill-user', JSON.stringify(profile))
+    localStorage.setItem('getskill-role', profile.role)
+
+    router.push('/dashboard')
+    router.refresh()
   }
-
-  const pixels = Array.from({ length: 55 })
-
-  const handleRoleChange = (selectedRole: UserRole) => {
-    setRole(selectedRole)
-    setEmail(demoUsers[selectedRole].email)
-    setPassword(demoUsers[selectedRole].password)
-    setError("")
-  }
-
-const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault()
-  setError("")
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    setError(error.message)
-    return
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", data.user.id)
-    .single()
-
-  if (profileError || !profile) {
-    setError("Profile not found. Please contact admin.")
-    return
-  }
-
-  localStorage.setItem("getskill-user", JSON.stringify(profile))
-  localStorage.setItem("getskill-role", profile.role)
-
-  router.push("/dashboard")
-}
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#143d8f66,transparent_35%),radial-gradient(circle_at_bottom_right,#54e34533,transparent_35%)]" />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#153e9066,transparent_35%),radial-gradient(circle_at_bottom_right,#54e34633,transparent_35%)]" />
 
       <div className="absolute inset-0 opacity-40">
-        <div className="absolute left-[10%] top-[15%] h-80 w-80 rounded-full bg-[#143d8f] blur-[140px]" />
-        <div className="absolute right-[10%] bottom-[10%] h-80 w-80 rounded-full bg-[#54e345] blur-[150px]" />
+        <div className="absolute left-[10%] top-[15%] h-80 w-80 bg-[#153e90] blur-[140px]" />
+        <div className="absolute bottom-[10%] right-[10%] h-80 w-80 bg-[#54e346] blur-[150px]" />
       </div>
 
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {pixels.map((_, index) => {
-          const size =
-            index % 9 === 0
-              ? 18
-              : index % 7 === 0
-              ? 14
-              : index % 5 === 0
-              ? 10
-              : index % 3 === 0
-              ? 6
-              : 4
+      <div className="relative z-10 w-full max-w-[720px]">
+        <div className="group/card relative isolate grid grid-cols-1 overflow-hidden border border-[#153e90]/35 bg-[#111827]/60 text-white shadow-[0_0_80px_rgba(21,62,144,0.18)] backdrop-blur-2xl transition-all duration-500 lg:grid-cols-2">
+          <span className="pointer-events-none absolute left-0 top-0 z-0 h-4 w-4 border-l-2 border-t-2 border-[#153e90]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
+          <span className="pointer-events-none absolute right-0 top-0 z-0 h-4 w-4 border-r-2 border-t-2 border-[#54e346]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
+          <span className="pointer-events-none absolute bottom-0 left-0 z-0 h-4 w-4 border-b-2 border-l-2 border-[#153e90]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
+          <span className="pointer-events-none absolute bottom-0 right-0 z-0 h-4 w-4 border-b-2 border-r-2 border-[#153e90]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
 
-          const left = `${(index * 13) % 100}%`
-          const duration = `${7 + (index % 8)}s`
-          const delay = `${index * 0.22}s`
-          const opacity =
-            index % 8 === 0
-              ? 0.95
-              : index % 2 === 0
-              ? 0.75
-              : 0.45
+          <span className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-[#153e90]/10 via-transparent to-[#54e346]/10 opacity-60 transition-opacity duration-300 group-hover/card:opacity-90" />
 
-          const color =
-            index % 2 === 0 ? "rgba(20, 61, 143, 0.95)" : "rgba(84, 227, 69, 0.95)"
+          <div className="relative z-10 hidden flex-col justify-between border-r border-white/10 p-7 text-white lg:flex">
+            <div>
+              <div className="mb-6 w-44 p-3">
+                <Image
+                  src="/pixel-pluz-logo.svg"
+                  alt="Pixel Pluz Logo"
+                  width={150}
+                  height={55}
+                  priority
+                />
+              </div>
 
-          return (
-            <span
-              key={index}
-              className="absolute top-[-30px] rounded-[2px]"
-              style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                left,
-                opacity,
-                backgroundColor: color,
-                boxShadow:
-                  index % 2 === 0
-                    ? "0 0 14px rgba(20, 61, 143, 0.8)"
-                    : "0 0 14px rgba(84, 227, 69, 0.7)",
-                animation: `pixelFall ${duration} linear infinite`,
-                animationDelay: delay,
-              }}
-            />
-          )
-        })}
-      </div>
+              <h1 className="mb-4 text-3xl font-bold leading-tight">
+                GetSkill Student Portal
+              </h1>
 
-      <div className="relative z-10 w-full max-w-[800px] grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden border border-white/15 bg-white/10 backdrop-blur-2xl shadow-[0_0_80px_rgba(20,61,143,0.18)]">
-        <div className="hidden lg:flex flex-col justify-between p-7 text-white border-r border-white/10">
-          <div>
-            <div className="w-44 mb-6  p-3">
+              <p className="max-w-md text-base leading-7 text-white/70">
+                A smart portal for students, mentors, and admins to manage
+                learning progress, tasks, submissions, reviews, and attendance.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative z-10 p-6 sm:p-8">
+            <div className="mb-8 lg:hidden">
               <Image
                 src="/pixel-pluz-logo.svg"
                 alt="Pixel Pluz Logo"
-                width={150}
-                height={55}
+                width={160}
+                height={60}
                 priority
               />
             </div>
 
-            <h1 className="text-3xl font-bold leading-tight mb-4">
-              GetSkill Student Portal
-            </h1>
-
-            <p className="text-white/70 text-base leading-7 max-w-md">
-              A smart portal for students, mentors, and admins to manage
-              learning progress, tasks, submissions, reviews, and attendance.
-            </p>
-          </div>
-
-
-        </div>
-
-        <div className="p-6 sm:p-8">
-          <div className="lg:hidden mb-8">
-            <Image
-              src="/pixel-pluz-logo.svg"
-              alt="Pixel Pluz Logo"
-              width={160}
-              height={60}
-              priority
-            />
-          </div>
-
-          <div className="mb-8">
-            <p className="text-[#4f8cff] text-sm font-semibold mb-2">
-              Welcome Back
-            </p>
-            <h2 className="text-3xl font-bold text-white">
-              Login to Portal
-            </h2>
-
-          </div>
-
-
-
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-[#143d8f] focus:ring-2 focus:ring-[#143d8f]/20"
-                placeholder="Enter email"
-              />
+            <div className="mb-8">
+              <p className="mb-2 text-sm font-semibold text-[#54e346]">
+                Welcome Back
+              </p>
+              <h2 className="text-3xl font-bold text-white">
+                Login to Portal
+              </h2>
             </div>
-<div>
-  <label className="block text-sm font-medium text-white/70 mb-2">
-    Password
-  </label>
 
-  <div className="relative">
-    <input
-      type={showPassword ? "text" : "password"}
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 pr-12 text-white outline-none placeholder:text-white/30 focus:border-[#143d8f] focus:ring-2 focus:ring-[#143d8f]/20"
-      placeholder="Enter password"
-    />
-
-    <button
-      type="button"
-      onClick={() => setShowPassword(!showPassword)}
-      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 transition hover:text-white"
-      aria-label={showPassword ? "Hide password" : "Show password"}
-    >
-      {showPassword ? (
-        <EyeOff size={20} strokeWidth={2} />
-      ) : (
-        <Eye size={20} strokeWidth={2} />
-      )}
-    </button>
-  </div>
-</div>
-
-            {error && (
-              <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300">
-                {error}
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/70">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border border-white/10 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-[#153e90] focus:ring-2 focus:ring-[#153e90]/20"
+                  placeholder="Enter email"
+                  required
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full rounded-xl bg-[#143d8f] px-4 py-3 font-semibold text-white transition hover:bg-[#1d4fb3] hover:shadow-[0_0_30px_rgba(20,61,143,0.45)]"
-            >
-              Login to Portal
-            </button>
-          </form>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/70">
+                  Password
+                </label>
 
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border border-white/10 bg-white/10 px-4 py-3 pr-12 text-white outline-none placeholder:text-white/30 focus:border-[#153e90] focus:ring-2 focus:ring-[#153e90]/20"
+                    placeholder="Enter password"
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 transition hover:text-white"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={20} strokeWidth={2} />
+                    ) : (
+                      <Eye size={20} strokeWidth={2} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#153e90] px-4 py-3 font-semibold text-white transition hover:bg-[#1d4fb3] hover:shadow-[0_0_30px_rgba(21,62,144,0.45)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Logging in...' : 'Login to Portal'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes pixelFall {
-          0% {
-            transform: translateY(-40px) rotate(0deg);
-          }
-          100% {
-            transform: translateY(115vh) rotate(220deg);
-          }
-        }
-      `}</style>
     </main>
   )
 }
