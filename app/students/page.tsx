@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
-import { useApp } from '@/lib/app-context'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -27,6 +26,7 @@ import {
   User,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import type { Role } from '@/lib/types'
 
 type Cohort = {
   id: string
@@ -62,8 +62,18 @@ type ReviewRecord = {
   } | null
 }
 
+type Profile = {
+  id: string
+  role: Role
+}
+
+type Mentor = {
+  id: string
+  profile_id: string
+}
+
 export default function StudentsPage() {
-  const { currentRole } = useApp()
+  const [currentRole, setCurrentRole] = useState<Role | null>(null)
 
   const [students, setStudents] = useState<Student[]>([])
   const [cohorts, setCohorts] = useState<Cohort[]>([])
@@ -86,11 +96,102 @@ export default function StudentsPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const fetchStudents = async () => {
-    setFetching(true)
-    setError('')
+  const fetchCurrentProfile = async () => {
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !userData.user) {
+      setError('User not logged in.')
+      return null
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', userData.user.id)
+      .single()
+
+    if (profileError || !profileData) {
+      setError('Profile not found.')
+      return null
+    }
+
+    const profile = profileData as Profile
+    setCurrentRole(profile.role)
+
+    return profile
+  }
+
+  const fetchAdminCohorts = async () => {
+    const { data, error } = await supabase
+      .from('cohorts')
+      .select('id, name')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setError(error.message)
+      return []
+    }
+
+    const realCohorts = (data || []) as Cohort[]
+    setCohorts(realCohorts)
+
+    if (realCohorts.length > 0) {
+      setCohortId(realCohorts[0].id)
+    }
+
+    return realCohorts
+  }
+
+  const fetchMentorCohorts = async (profileId: string) => {
+    const { data: mentorData, error: mentorError } = await supabase
+      .from('mentors')
+      .select('id, profile_id')
+      .eq('profile_id', profileId)
+      .single()
+
+    if (mentorError || !mentorData) {
+      setError('Mentor record not found.')
+      setCohorts([])
+      return []
+    }
+
+    const mentor = mentorData as Mentor
 
     const { data, error } = await supabase
+      .from('cohort_mentors')
+      .select(`
+        cohorts (
+          id,
+          name
+        )
+      `)
+      .eq('mentor_id', mentor.id)
+
+    if (error) {
+      setError(error.message)
+      setCohorts([])
+      return []
+    }
+
+    const realCohorts =
+      data?.map((item: any) => item.cohorts).filter(Boolean) || []
+
+    setCohorts(realCohorts)
+
+    if (realCohorts.length > 0) {
+      setCohortId(realCohorts[0].id)
+    }
+
+    return realCohorts as Cohort[]
+  }
+
+  const fetchStudents = async (role: Role, allowedCohortIds: string[]) => {
+    if (role === 'mentor' && allowedCohortIds.length === 0) {
+      setStudents([])
+      return
+    }
+
+    let query = supabase
       .from('students')
       .select(`
         id,
@@ -110,38 +211,33 @@ export default function StudentsPage() {
       `)
       .order('created_at', { ascending: false })
 
+    if (role === 'mentor') {
+      query = query.in('cohort_id', allowedCohortIds)
+    }
+
+    const { data, error } = await query
+
     if (error) {
       setError(error.message)
-      setFetching(false)
       return
     }
 
     setStudents((data || []) as Student[])
-    setFetching(false)
   }
 
-  const fetchCohorts = async () => {
-    const { data, error } = await supabase
-      .from('cohorts')
-      .select('id, name')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setError(error.message)
+  const fetchAttendance = async (role: Role, allowedCohortIds: string[]) => {
+    if (role === 'mentor' && allowedCohortIds.length === 0) {
+      setAttendanceRecords([])
       return
     }
 
-    setCohorts(data || [])
+    let query = supabase.from('attendance').select('student_id, status')
 
-    if (data && data.length > 0) {
-      setCohortId(data[0].id)
+    if (role === 'mentor') {
+      query = query.in('cohort_id', allowedCohortIds)
     }
-  }
 
-  const fetchAttendance = async () => {
-    const { data, error } = await supabase
-      .from('attendance')
-      .select('student_id, status')
+    const { data, error } = await query
 
     if (error) {
       return
@@ -168,12 +264,44 @@ export default function StudentsPage() {
   }
 
   const fetchAllData = async () => {
+    setFetching(true)
+    setError('')
+
+    const profile = await fetchCurrentProfile()
+
+    if (!profile) {
+      setFetching(false)
+      return
+    }
+
+    if (profile.role === 'student') {
+      setStudents([])
+      setCohorts([])
+      setAttendanceRecords([])
+      setReviews([])
+      setFetching(false)
+      return
+    }
+
+    let realCohorts: Cohort[] = []
+
+    if (profile.role === 'admin') {
+      realCohorts = await fetchAdminCohorts()
+    }
+
+    if (profile.role === 'mentor') {
+      realCohorts = await fetchMentorCohorts(profile.id)
+    }
+
+    const allowedCohortIds = realCohorts.map((cohort) => cohort.id)
+
     await Promise.all([
-      fetchStudents(),
-      fetchCohorts(),
-      fetchAttendance(),
+      fetchStudents(profile.role, allowedCohortIds),
+      fetchAttendance(profile.role, allowedCohortIds),
       fetchReviews(),
     ])
+
+    setFetching(false)
   }
 
   useEffect(() => {
@@ -308,6 +436,16 @@ export default function StudentsPage() {
     }
   }
 
+  if (fetching) {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center py-16">
+          <p className="text-muted-foreground">Loading students...</p>
+        </div>
+      </AppShell>
+    )
+  }
+
   if (currentRole === 'student') {
     return (
       <AppShell>
@@ -408,106 +546,96 @@ export default function StudentsPage() {
             <span className="col-span-1" />
           </div>
 
-          {fetching ? (
-            <Card>
-              <div className="py-12 text-center text-sm text-muted-foreground">
-                Loading students...
-              </div>
-            </Card>
-          ) : (
-            <>
-              {filtered.map((student) => {
-                const initials = student.name
-                  .split(' ')
-                  .map((name) => name[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()
+          {filtered.map((student) => {
+            const initials = student.name
+              .split(' ')
+              .map((name) => name[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase()
 
-                return (
-                  <Link key={student.id} href={`/students/${student.id}`}>
-                    <div
-                      className={cn(
-                        'grid grid-cols-12 gap-3 items-center rounded-lg border px-3 py-3 hover:bg-accent/30 transition-colors cursor-pointer',
-                        student.attendanceRate < 75
-                          ? 'border-yellow-500/20'
-                          : 'border-border'
-                      )}
-                    >
-                      <div className="col-span-4 flex items-center gap-3 min-w-0">
-                        <Avatar className="h-9 w-9 shrink-0">
-                          <AvatarImage src={student.profile_picture_url || ''} />
-                          <AvatarFallback className="text-xs">
-                            {initials || <User className="h-4 w-4" />}
-                          </AvatarFallback>
-                        </Avatar>
+            return (
+              <Link key={student.id} href={`/students/${student.id}`}>
+                <div
+                  className={cn(
+                    'grid grid-cols-12 gap-3 items-center rounded-lg border px-3 py-3 hover:bg-accent/30 transition-colors cursor-pointer',
+                    student.attendanceRate < 75
+                      ? 'border-yellow-500/20'
+                      : 'border-border'
+                  )}
+                >
+                  <div className="col-span-4 flex items-center gap-3 min-w-0">
+                    <Avatar className="h-9 w-9 shrink-0">
+                      <AvatarImage src={student.profile_picture_url || ''} />
+                      <AvatarFallback className="text-xs">
+                        {initials || <User className="h-4 w-4" />}
+                      </AvatarFallback>
+                    </Avatar>
 
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {student.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {student.email}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {student.student_code}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="col-span-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {student.cohortName}
-                        </Badge>
-                      </div>
-
-                      <div className="col-span-2">
-                        <div className="flex items-center gap-2">
-                          {student.attendanceRate < 75 && (
-                            <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
-                          )}
-
-                          <span
-                            className={cn(
-                              'text-sm font-medium',
-                              student.attendanceRate >= 75
-                                ? 'text-green-400'
-                                : 'text-yellow-400'
-                            )}
-                          >
-                            {student.attendanceRate}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="col-span-2">
-                        <span className="text-sm">
-                          {student.avgGrade > 0 ? `${student.avgGrade}%` : '—'}
-                        </span>
-                      </div>
-
-                      <div className="col-span-1">
-                        {student.eligibility.eligible ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-400" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4 text-yellow-400" />
-                        )}
-                      </div>
-
-                      <div className="col-span-1 flex justify-end">
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {student.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {student.email}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {student.student_code}
+                      </p>
                     </div>
-                  </Link>
-                )
-              })}
+                  </div>
 
-              {filtered.length === 0 && (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  No students found
+                  <div className="col-span-2">
+                    <Badge variant="secondary" className="text-xs">
+                      {student.cohortName}
+                    </Badge>
+                  </div>
+
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-2">
+                      {student.attendanceRate < 75 && (
+                        <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
+                      )}
+
+                      <span
+                        className={cn(
+                          'text-sm font-medium',
+                          student.attendanceRate >= 75
+                            ? 'text-green-400'
+                            : 'text-yellow-400'
+                        )}
+                      >
+                        {student.attendanceRate}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <span className="text-sm">
+                      {student.avgGrade > 0 ? `${student.avgGrade}%` : '—'}
+                    </span>
+                  </div>
+
+                  <div className="col-span-1">
+                    {student.eligibility.eligible ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                    )}
+                  </div>
+
+                  <div className="col-span-1 flex justify-end">
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
-              )}
-            </>
+              </Link>
+            )
+          })}
+
+          {filtered.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No students found
+            </div>
           )}
         </div>
       </div>

@@ -3,7 +3,6 @@
 import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
-import { useApp } from '@/lib/app-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -12,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import type { Role } from '@/lib/types'
 import {
   ArrowLeft,
   CalendarCheck,
@@ -20,13 +20,18 @@ import {
   Flame,
   FileText,
   ListTodo,
-  Award,
   Github,
   Globe,
 } from 'lucide-react'
 
+type Profile = {
+  id: string
+  role: Role
+}
+
 type Student = {
   id: string
+  profile_id: string
   student_code: string
   phone: string | null
   status: string
@@ -93,23 +98,86 @@ export default function StudentProfilePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
-  const { currentRole } = useApp()
 
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
+  const [hasAccess, setHasAccess] = useState(false)
   const [student, setStudent] = useState<Student | null>(null)
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const checkProfileAccess = async (
+    profile: Profile,
+    studentData: Student
+  ) => {
+    if (profile.role === 'admin') {
+      return true
+    }
+
+    if (profile.role === 'student') {
+      return studentData.profile_id === profile.id
+    }
+
+    if (profile.role === 'mentor') {
+      const { data: mentorData } = await supabase
+        .from('mentors')
+        .select('id')
+        .eq('profile_id', profile.id)
+        .single()
+
+      if (!mentorData) {
+        return false
+      }
+
+      const { data: assignedCohort } = await supabase
+        .from('cohort_mentors')
+        .select('cohort_id')
+        .eq('mentor_id', mentorData.id)
+        .eq('cohort_id', studentData.cohort_id)
+        .maybeSingle()
+
+      return !!assignedCohort
+    }
+
+    return false
+  }
+
   const fetchStudentProfile = async () => {
     setLoading(true)
     setError('')
+
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !userData.user) {
+      setError('User not logged in.')
+      setLoading(false)
+      return
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', userData.user.id)
+      .single()
+
+    if (profileError || !profileData) {
+      setError('Profile not found.')
+      setLoading(false)
+      return
+    }
+
+    const profile = profileData as Profile
+    setCurrentProfile(profile)
 
     const { data: studentData, error: studentError } = await supabase
       .from('students')
       .select(`
         id,
+        profile_id,
         student_code,
         phone,
         status,
@@ -134,7 +202,18 @@ export default function StudentProfilePage({
       return
     }
 
-    setStudent(studentData as Student)
+    const realStudent = studentData as Student
+    const allowed = await checkProfileAccess(profile, realStudent)
+
+    if (!allowed) {
+      setHasAccess(false)
+      setError('You do not have permission to view this profile.')
+      setLoading(false)
+      return
+    }
+
+    setHasAccess(true)
+    setStudent(realStudent)
 
     const { data: attendanceData } = await supabase
       .from('attendance')
@@ -224,25 +303,15 @@ export default function StudentProfilePage({
   const taskCompletion = useMemo(() => {
     if (tasks.length === 0) return 0
 
-    const doneTasks = tasks.filter((task) => task.status === 'done').length
+    const doneTasks = tasks.filter(
+      (task) => task.status === 'completed' || task.status === 'done'
+    ).length
 
     return Math.round((doneTasks / tasks.length) * 100)
   }, [tasks])
 
   const eligibility = {
     eligible: attendanceRate >= 75 && avgGrade >= 60,
-  }
-
-  if (currentRole === 'student') {
-    return (
-      <AppShell>
-        <div className="flex flex-col items-center justify-center py-16">
-          <p className="text-muted-foreground">
-            You do not have permission to view this profile.
-          </p>
-        </div>
-      </AppShell>
-    )
   }
 
   if (loading) {
@@ -255,11 +324,13 @@ export default function StudentProfilePage({
     )
   }
 
-  if (error || !student) {
+  if (error || !student || !hasAccess) {
     return (
       <AppShell>
         <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <p className="text-muted-foreground">{error || 'Student not found.'}</p>
+          <p className="text-muted-foreground">
+            {error || 'Student not found.'}
+          </p>
           <Button asChild variant="outline">
             <Link href="/students">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -617,7 +688,8 @@ export default function StudentProfilePage({
                           <Badge
                             variant="outline"
                             className={cn(
-                              task.status === 'done'
+                              task.status === 'completed' ||
+                                task.status === 'done'
                                 ? 'border-green-500/30 text-green-400'
                                 : 'border-yellow-500/30 text-yellow-400'
                             )}

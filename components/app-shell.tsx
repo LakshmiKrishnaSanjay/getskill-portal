@@ -41,6 +41,7 @@ import {
 } from 'lucide-react'
 import type { Role } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
+import Image from 'next/image'
 
 interface NavItem {
   title: string
@@ -296,12 +297,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
           {!sidebarCollapsed && (
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Command className="h-5 w-5" />
-              </div>
-              <span className="text-lg font-semibold">GetSkill</span>
-            </Link>
+           <Link href="/dashboard" className="flex items-center">
+  <Image
+    src="/main-logo.svg"
+    alt="Pixel Pluz"
+    width={140}
+    height={40}
+    className="h-8 w-auto object-contain"
+    priority
+  />
+</Link>
           )}
 
           <Button

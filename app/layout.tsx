@@ -1,34 +1,41 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import { AppProvider } from '@/lib/app-context'
 import { DataProvider } from '@/lib/data-context'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const redHatDisplay = localFont({
+  src: [
+    {
+      path: '../public/fonts/RedHatDisplay-VariableFont_wght.ttf',
+      weight: '300 900',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-red-hat-display',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
-  title: 'GetSkill Portal',
+  title: 'Pixel Pluz Portal',
   description: 'Creative tech education operating system',
   generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+icons: {
+  icon: [
+    {
+      url: '/icon-mark-white.svg',
+      type: 'image/svg+xml',
+      media: '(prefers-color-scheme: dark)',
+    },
+    {
+      url: '/icon-mark-colour.svg',
+      type: 'image/svg+xml',
+      media: '(prefers-color-scheme: light)',
+    },
+  ],
+  apple: '/apple-icon.png',
+},
 }
 
 export default function RootLayout({
@@ -38,11 +45,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="font-sans antialiased bg-background text-foreground">
+      <body
+        className={`${redHatDisplay.variable} font-sans antialiased bg-background text-foreground`}
+      >
         <AppProvider>
-          <DataProvider>
-            {children}
-          </DataProvider>
+          <DataProvider>{children}</DataProvider>
         </AppProvider>
         <Analytics />
       </body>
