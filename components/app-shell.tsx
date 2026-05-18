@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useData } from '@/lib/data-context'
@@ -15,38 +16,28 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Input } from '@/components/ui/input'
 import {
-  LayoutDashboard,
-  FolderKanban,
-  ListTodo,
-  FileText,
-  Star,
-  Briefcase,
-  Users,
-  BarChart3,
   Settings,
   ChevronLeft,
   ChevronRight,
-  Search,
   Bell,
-  Command,
   User,
   LogOut,
   GraduationCap,
   UserCog,
   Shield,
   UserCheck,
-  CalendarCheck,
+  Briefcase,
+  Users,
 } from 'lucide-react'
 import type { Role } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
-import Image from 'next/image'
 
 interface NavItem {
   title: string
   href: string
-  icon: typeof LayoutDashboard
+  icon: string
+  fallbackIcon?: React.ElementType
   roles: Role[]
 }
 
@@ -63,86 +54,90 @@ const navigation: NavItem[] = [
   {
     title: 'Dashboard',
     href: '/dashboard',
-    icon: LayoutDashboard,
+    icon: '/icons/light-mode/dashboard.svg',
     roles: ['student', 'mentor', 'admin'],
   },
   {
     title: 'Attendance',
     href: '/attendance',
-    icon: CalendarCheck,
+    icon: '/icons/light-mode/attendance.svg',
     roles: ['student', 'mentor', 'admin'],
   },
   {
     title: 'Workstreams',
     href: '/workstreams',
-    icon: FolderKanban,
+    icon: '/icons/light-mode/workstream.svg',
     roles: ['student', 'mentor', 'admin'],
   },
   {
     title: 'Tasks',
     href: '/tasks',
-    icon: ListTodo,
+    icon: '/icons/light-mode/tasks.svg',
     roles: ['student', 'mentor'],
   },
   {
     title: 'Submissions',
     href: '/submissions',
-    icon: FileText,
+    icon: '/icons/light-mode/submissions.svg',
     roles: ['student', 'mentor'],
   },
   {
     title: 'Reviews',
     href: '/reviews',
-    icon: Star,
+    icon: '/icons/light-mode/reviews.svg',
     roles: ['mentor'],
   },
   {
     title: 'Portfolio',
     href: '/portfolio',
-    icon: Briefcase,
+    icon: '',
+    fallbackIcon: Briefcase,
     roles: ['student'],
   },
   {
     title: 'Career',
     href: '/career',
-    icon: GraduationCap,
+    icon: '',
+    fallbackIcon: GraduationCap,
     roles: ['student'],
   },
   {
     title: 'Students',
     href: '/students',
-    icon: Users,
+    icon: '/icons/light-mode/students.svg',
     roles: ['admin', 'mentor'],
   },
   {
     title: 'Mentors',
     href: '/mentors',
-    icon: UserCheck,
+    icon: '',
+    fallbackIcon: UserCheck,
     roles: ['admin'],
   },
   {
     title: 'Cohorts',
     href: '/cohorts',
-    icon: Users,
+    icon: '/icons/light-mode/patch.svg',
+    fallbackIcon: Users,
     roles: ['admin', 'mentor'],
   },
   {
     title: 'Analytics',
     href: '/analytics',
-    icon: BarChart3,
+    icon: '/icons/light-mode/analytics.svg',
     roles: ['admin', 'mentor'],
   },
   {
     title: 'Admissions',
     href: '/admissions',
-    icon: UserCog,
+    icon: '',
+    fallbackIcon: UserCog,
     roles: ['admin'],
   },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [, setCommandOpen] = useState(false)
   const [backendProfile, setBackendProfile] = useState<BackendProfile | null>(
     null
   )
@@ -297,16 +292,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
           {!sidebarCollapsed && (
-           <Link href="/dashboard" className="flex items-center">
-  <Image
-    src="/main-logo.svg"
-    alt="Pixel Pluz"
-    width={140}
-    height={40}
-    className="h-8 w-auto object-contain"
-    priority
-  />
-</Link>
+            <Link href="/dashboard" className="flex items-center">
+              <Image
+                src="/main-logo.svg"
+                alt="Pixel Pluz"
+                width={140}
+                height={40}
+                className="h-8 w-auto object-contain"
+                priority
+              />
+            </Link>
           )}
 
           <Button
@@ -323,24 +318,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
           {filteredNavigation.map((item) => {
-            const Icon = item.icon
             const isActive = pathname === item.href
+            const FallbackIcon = item.fallbackIcon
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   sidebarCollapsed && 'justify-center'
                 )}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
+                {item.icon ? (
+                  <Image
+                    src={item.icon}
+                    alt={item.title}
+                    width={20}
+                    height={20}
+                    className="h-5 w-5 flex-shrink-0 object-contain"
+                  />
+                ) : FallbackIcon ? (
+                  <FallbackIcon className="h-5 w-5 flex-shrink-0" />
+                ) : null}
+
                 {!sidebarCollapsed && <span>{item.title}</span>}
               </Link>
             )
@@ -351,7 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/settings"
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+              'flex items-center gap-3 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
               sidebarCollapsed && 'justify-center'
             )}
           >
@@ -363,23 +369,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
-          <div className="flex items-center gap-4 flex-1 max-w-xl">
-            {/* <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-              <Input
-                type="search"
-                placeholder="Search... (⌘K)"
-                className="pl-9 pr-4 bg-background"
-                onClick={() => setCommandOpen(true)}
-                readOnly
-              />
-
-              <kbd className="pointer-events-none absolute right-3 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
-                <Command className="h-3 w-3" />K
-              </kbd>
-            </div> */}
-          </div>
+          <div className="flex max-w-xl flex-1 items-center gap-4"></div>
 
           <div className="flex items-center gap-4">
             <Button variant="outline" size="sm" className="gap-2 cursor-default">
@@ -398,7 +388,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent active:bg-accent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 data-[state=open]:bg-accent">
+                <button className="flex items-center gap-3 px-2 py-1.5 transition-colors hover:bg-accent active:bg-accent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 data-[state=open]:bg-accent">
                   <Avatar className="h-9 w-9">
                     <AvatarImage src={displayImage} />
                     <AvatarFallback>{displayInitials || 'U'}</AvatarFallback>
