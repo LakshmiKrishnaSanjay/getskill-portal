@@ -1,4 +1,4 @@
-export type Role = 'student' | 'mentor' | 'admin'
+export type Role = 'student' | 'mentor' | 'admin' | 'superadmin' | 'placement'
 
 export type Status = 'active' | 'inactive' | 'done' | 'archived'
 

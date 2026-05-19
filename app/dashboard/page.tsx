@@ -16,6 +16,7 @@ import {
   AlertCircle,
   ArrowRight,
   BookOpen,
+  Briefcase,
   CalendarCheck,
   CheckCircle2,
   Clock,
@@ -438,7 +439,7 @@ export default function DashboardPage() {
       }
     }
 
-    if (currentProfile.role === 'admin') {
+    if (currentProfile.role === 'admin' || currentProfile.role === 'superadmin') {
       const [
         studentsCount,
         mentorsCount,
@@ -572,6 +573,31 @@ export default function DashboardPage() {
       setTasks((taskData || []) as TaskRow[])
       setSubmissions((submissionData || []) as SubmissionRow[])
       setAttendance((attendanceData || []) as AttendanceRow[])
+    }
+
+    if (currentProfile.role === 'placement') {
+      const { data: studentData } = await supabase
+        .from('students')
+        .select(`
+          id,
+          profile_id,
+          cohort_id,
+          student_code,
+          status,
+          profile_picture_url,
+          profiles (
+            full_name,
+            email
+          ),
+          cohorts (
+            name,
+            cohort_code
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(8)
+
+      setStudents((studentData || []) as StudentRow[])
     }
 
     setLoading(false)
@@ -990,9 +1016,13 @@ export default function DashboardPage() {
   const renderAdminDashboard = () => (
     <>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+        <h1 className="text-3xl font-bold mb-2">
+          {profile.role === 'superadmin' ? 'Super Admin Dashboard' : 'Admin Dashboard'}
+        </h1>
         <p className="text-muted-foreground">
-          Manage cohorts, students, mentors, tasks, submissions, and attendance.
+          {profile.role === 'superadmin'
+            ? 'Full access to admin, mentor, student, and placement operations.'
+            : 'Manage cohorts, students, mentors, tasks, submissions, and attendance.'}
         </p>
       </div>
 
@@ -1201,16 +1231,145 @@ export default function DashboardPage() {
     </>
   )
 
+  const renderPlacementDashboard = () => (
+    <>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Placement Dashboard</h1>
+        <p className="text-muted-foreground">
+          Review student portfolios and career readiness for placement support.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Students to Review</CardTitle>
+            <Users className="h-4 w-4 text-[#153E90]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{students.length}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Recent students available for portfolio and career checks
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Portfolio Review</CardTitle>
+            <Briefcase className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Portfolio</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Check student work, projects, and presentation readiness
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Career Readiness</CardTitle>
+            <GraduationCap className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Career</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Review student career profile and placement preparation
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2 mb-8">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Placement Actions</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button asChild>
+                <Link href="/portfolio">
+                  View Portfolio
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+
+              <Button asChild variant="outline">
+                <Link href="/career">
+                  View Career
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Students</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {students.map((student) => {
+                const studentName = student.profiles?.full_name || student.student_code
+                const initials = studentName
+                  .split(' ')
+                  .map((item) => item[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+
+                return (
+                  <div
+                    key={student.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3"
+                  >
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarImage src={student.profile_picture_url || ''} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {studentName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {student.cohorts?.name || 'No cohort'} · {student.student_code}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {students.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No students found.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  )
+
   return (
     <AppShell>
       <div className="space-y-8">
         {profile.role === 'student' && renderStudentDashboard()}
         {profile.role === 'mentor' && renderMentorDashboard()}
-        {profile.role === 'admin' && renderAdminDashboard()}
+        {(profile.role === 'admin' || profile.role === 'superadmin') &&
+          renderAdminDashboard()}
+        {profile.role === 'placement' && renderPlacementDashboard()}
 
         {profile.role !== 'student' &&
           profile.role !== 'mentor' &&
-          profile.role !== 'admin' && (
+          profile.role !== 'admin' &&
+          profile.role !== 'superadmin' &&
+          profile.role !== 'placement' && (
             <Card>
               <CardContent className="py-12 text-center">
                 <AlertCircle className="mx-auto mb-3 h-8 w-8 text-red-500" />

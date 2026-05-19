@@ -22,10 +22,10 @@ function Card({
       <span className="pointer-events-none absolute bottom-0 left-0 z-0 h-3 w-3 border-b-2 border-l-2 border-[#153e90]/70 transition-all duration-300 group-hover/card:h-6 group-hover/card:w-6" />
       <span className="pointer-events-none absolute bottom-0 right-0 z-0 h-3 w-3 border-b-2 border-r-2 border-[#153e90]/70 transition-all duration-300 group-hover/card:h-6 group-hover/card:w-6" />
 
-      <span className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-[#153e90]/10 via-transparent to-[#54e346]/10 opacity-40 transition-opacity duration-300 group-hover/card:opacity-80" />
+      <span className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(21,62,144,0.22),transparent_42%),radial-gradient(circle_at_top_right,rgba(84,227,70,0.20),transparent_42%)] opacity-50 transition-opacity duration-300 group-hover/card:opacity-90" />
 
       <span className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
-        <span className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-[#153e90]/40 to-transparent" />
+        <span className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-[#153e90]/40 to-[#54e346]/40" />
       </span>
 
       <div className="relative z-10 flex flex-col gap-6">{children}</div>

@@ -26,8 +26,10 @@ import {
   GraduationCap,
   UserCog,
   Shield,
+  ShieldCheck,
   UserCheck,
   Briefcase,
+  BriefcaseBusiness,
   Users,
 } from 'lucide-react'
 import type { Role } from '@/lib/types'
@@ -55,85 +57,93 @@ const navigation: NavItem[] = [
     title: 'Dashboard',
     href: '/dashboard',
     icon: '/icons/light-mode/dashboard.svg',
-    roles: ['student', 'mentor', 'admin'],
+    roles: ['superadmin', 'student', 'mentor', 'admin', 'placement'],
   },
-  {
-    title: 'Attendance',
-    href: '/attendance',
-    icon: '/icons/light-mode/attendance.svg',
-    roles: ['student', 'mentor', 'admin'],
-  },
-  {
+    {
     title: 'Workstreams',
     href: '/workstreams',
     icon: '/icons/light-mode/workstream.svg',
-    roles: ['student', 'mentor', 'admin'],
+    roles: ['superadmin', 'student', 'mentor', 'admin'],
   },
   {
-    title: 'Tasks',
-    href: '/tasks',
-    icon: '/icons/light-mode/tasks.svg',
-    roles: ['student', 'mentor'],
+    title: 'All Users',
+    href: '/allusers',
+    icon: '/icons/light-mode/users.svg',
+    roles: ['superadmin'],
   },
-  {
-    title: 'Submissions',
-    href: '/submissions',
-    icon: '/icons/light-mode/submissions.svg',
-    roles: ['student', 'mentor'],
-  },
-  {
-    title: 'Reviews',
-    href: '/reviews',
-    icon: '/icons/light-mode/reviews.svg',
-    roles: ['mentor'],
-  },
-  {
-    title: 'Portfolio',
-    href: '/portfolio',
-    icon: '',
-    fallbackIcon: Briefcase,
-    roles: ['student'],
-  },
-  {
-    title: 'Career',
-    href: '/career',
-    icon: '',
-    fallbackIcon: GraduationCap,
-    roles: ['student'],
-  },
-  {
+    {
     title: 'Students',
     href: '/students',
     icon: '/icons/light-mode/students.svg',
-    roles: ['admin', 'mentor'],
+    roles: ['superadmin', 'admin', 'mentor'],
   },
   {
     title: 'Mentors',
     href: '/mentors',
     icon: '',
     fallbackIcon: UserCheck,
-    roles: ['admin'],
-  },
+    roles: ['superadmin', 'admin'],
+  }, 
   {
     title: 'Cohorts',
     href: '/cohorts',
     icon: '/icons/light-mode/patch.svg',
     fallbackIcon: Users,
-    roles: ['admin', 'mentor'],
+    roles: ['superadmin', 'admin', 'mentor'],
   },
+  {
+    title: 'Attendance',
+    href: '/attendance',
+    icon: '/icons/light-mode/attendance.svg',
+    roles: ['superadmin', 'student', 'mentor', 'admin'],
+  },
+
+  {
+    title: 'Tasks',
+    href: '/tasks',
+    icon: '/icons/light-mode/tasks.svg',
+    roles: ['superadmin', 'student', 'mentor'],
+  },
+  {
+    title: 'Submissions',
+    href: '/submissions',
+    icon: '/icons/light-mode/submissions.svg',
+    roles: ['superadmin', 'student', 'mentor'],
+  },
+  {
+    title: 'Reviews',
+    href: '/reviews',
+    icon: '/icons/light-mode/reviews.svg',
+    roles: ['superadmin', 'mentor'],
+  },
+  {
+    title: 'Portfolio',
+    href: '/portfolio',
+    icon: '',
+    fallbackIcon: Briefcase,
+    roles: ['superadmin', 'student', 'placement'],
+  },
+  {
+    title: 'Career',
+    href: '/career',
+    icon: '',
+    fallbackIcon: GraduationCap,
+    roles: ['superadmin', 'student', 'placement'],
+  },
+
   {
     title: 'Analytics',
     href: '/analytics',
     icon: '/icons/light-mode/analytics.svg',
-    roles: ['admin', 'mentor'],
+    roles: ['superadmin', 'admin', 'mentor'],
   },
-  {
-    title: 'Admissions',
-    href: '/admissions',
-    icon: '',
-    fallbackIcon: UserCog,
-    roles: ['admin'],
-  },
+  // {
+  //   title: 'Admissions',
+  //   href: '/admissions',
+  //   icon: '',
+  //   fallbackIcon: UserCog,
+  //   roles: ['superadmin', 'admin'],
+  // },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -148,6 +158,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { notifications } = useData()
 
   const unreadCount = notifications.filter((n) => !n.read).length
+
+  const [storedRole, setStoredRole] = useState<Role | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
 
   const fetchBackendProfile = async () => {
     const { data: userData } = await supabase.auth.getUser()
@@ -197,6 +210,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       profile_picture_url: profilePictureUrl,
     })
   }
+  
+  useEffect(() => {
+  setIsMounted(true)
+
+  const savedRole = localStorage.getItem('getskill-role') as Role | null
+
+  if (savedRole) {
+    setStoredRole(savedRole)
+  }
+}, [])
 
   useEffect(() => {
     fetchBackendProfile()
@@ -213,7 +236,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const activeRole = backendProfile?.role || 'student'
+  const activeRole = backendProfile?.role || storedRole
+
   const displayName = backendProfile?.full_name || 'User'
   const displayEmail = backendProfile?.email || ''
 
@@ -230,9 +254,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .slice(0, 2)
     .toUpperCase()
 
-  const filteredNavigation = navigation.filter((item) =>
-    item.roles.includes(activeRole)
-  )
+const filteredNavigation = activeRole
+  ? navigation.filter((item) => item.roles.includes(activeRole))
+  : []
 
   const getRoleIcon = (role: Role) => {
     switch (role) {
@@ -242,6 +266,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return <UserCog className="h-4 w-4" />
       case 'admin':
         return <Shield className="h-4 w-4" />
+      case 'superadmin':
+        return <ShieldCheck className="h-4 w-4" />
+      case 'placement':
+        return <BriefcaseBusiness className="h-4 w-4" />
     }
   }
 
@@ -253,6 +281,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return 'Mentor'
       case 'admin':
         return 'Admin'
+      case 'superadmin':
+        return 'Super Admin'
+      case 'placement':
+        return 'Placement'
     }
   }
 
@@ -372,10 +404,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex max-w-xl flex-1 items-center gap-4"></div>
 
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" className="gap-2 cursor-default">
-              {getRoleIcon(activeRole)}
-              <span className="hidden sm:inline">{getRoleLabel(activeRole)}</span>
-            </Button>
+            {activeRole && (
+  <Button variant="outline" size="sm" className="gap-2 cursor-default">
+    {getRoleIcon(activeRole)}
+    <span className="hidden sm:inline">{getRoleLabel(activeRole)}</span>
+  </Button>
+)}
 
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />

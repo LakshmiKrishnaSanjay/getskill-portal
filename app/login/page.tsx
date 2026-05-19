@@ -52,11 +52,12 @@ export default function LoginPage() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#153e9066,transparent_35%),radial-gradient(circle_at_bottom_right,#54e34633,transparent_35%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,#153e9066,transparent_35%),radial-gradient(circle_at_bottom_right,#153e9066,transparent_35%)]" />
 
       <div className="absolute inset-0 opacity-40">
         <div className="absolute left-[10%] top-[15%] h-80 w-80 bg-[#153e90] blur-[140px]" />
-        <div className="absolute bottom-[10%] right-[10%] h-80 w-80 bg-[#54e346] blur-[150px]" />
+        <div className="absolute left-[10%] bottom-[15%] h-80 w-80 bg-[#153e90] blur-[140px]" /> 
+       {/* <div className="absolute right-[10%] top-[15%] h-80 w-80 bg-[#54e346] blur-[150px]" /> */}
       </div>
 
       <div className="relative z-10 w-full max-w-[720px]">
@@ -65,9 +66,7 @@ export default function LoginPage() {
           <span className="pointer-events-none absolute right-0 top-0 z-0 h-4 w-4 border-r-2 border-t-2 border-[#54e346]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
           <span className="pointer-events-none absolute bottom-0 left-0 z-0 h-4 w-4 border-b-2 border-l-2 border-[#153e90]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
           <span className="pointer-events-none absolute bottom-0 right-0 z-0 h-4 w-4 border-b-2 border-r-2 border-[#153e90]/80 transition-all duration-300 group-hover/card:h-7 group-hover/card:w-7" />
-
-          <span className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-[#153e90]/10 via-transparent to-[#54e346]/10 opacity-60 transition-opacity duration-300 group-hover/card:opacity-90" />
-
+<span className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(21,62,144,0.18),transparent_42%),radial-gradient(circle_at_top_right,rgba(84,227,70,0.18),transparent_42%)] opacity-60 transition-opacity duration-300 group-hover/card:opacity-90" />
           <div className="relative z-10 hidden flex-col justify-between border-r border-white/10 p-7 text-white lg:flex">
             <div>
               <div className="mb-6 w-44 p-3">
