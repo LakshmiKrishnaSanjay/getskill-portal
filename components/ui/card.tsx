@@ -11,8 +11,16 @@ function Card({
     <div
       data-slot="card"
       className={cn(
-        'group/card relative isolate flex flex-col gap-6 overflow-hidden border border-[#153e90]/35 bg-[#111827]/60 py-6 text-card-foreground shadow-[0_0_30px_rgba(21,62,144,0.10)] backdrop-blur-xl transition-all duration-500',
-        'hover:border-[#153e90]/60 hover:shadow-[0_0_50px_rgba(21,62,144,0.22)]',
+        'group/card relative isolate flex flex-col gap-6 overflow-hidden border py-6 text-card-foreground backdrop-blur-xl transition-all duration-500',
+
+        // White mode
+        'border-[#153e90]/25 bg-white shadow-[0_0_30px_rgba(21,62,144,0.08)]',
+        'hover:border-[#153e90]/45 hover:shadow-[0_0_50px_rgba(21,62,144,0.16)]',
+
+        // Dark mode - same as your current design
+        'dark:border-[#153e90]/35 dark:bg-[#111827]/60 dark:shadow-[0_0_30px_rgba(21,62,144,0.10)]',
+        'dark:hover:border-[#153e90]/60 dark:hover:shadow-[0_0_50px_rgba(21,62,144,0.22)]',
+
         className,
       )}
       {...props}
@@ -22,10 +30,10 @@ function Card({
       <span className="pointer-events-none absolute bottom-0 left-0 z-0 h-3 w-3 border-b-2 border-l-2 border-[#153e90]/70 transition-all duration-300 group-hover/card:h-6 group-hover/card:w-6" />
       <span className="pointer-events-none absolute bottom-0 right-0 z-0 h-3 w-3 border-b-2 border-r-2 border-[#153e90]/70 transition-all duration-300 group-hover/card:h-6 group-hover/card:w-6" />
 
-      <span className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(21,62,144,0.22),transparent_42%),radial-gradient(circle_at_top_right,rgba(84,227,70,0.20),transparent_42%)] opacity-50 transition-opacity duration-300 group-hover/card:opacity-90" />
+      <span className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(21,62,144,0.22),transparent_70%),radial-gradient(circle_at_top_right,rgba(21,62,144,0.18),transparent_45%),radial-gradient(circle_at_center,rgba(84,227,70,0.04),transparent_55%)] opacity-100 transition-opacity duration-300 group-hover/card:opacity-100 dark:bg-[radial-gradient(circle_at_top_left,rgba(21,62,144,0.22),transparent_42%),radial-gradient(circle_at_top_right,rgba(84,227,70,0.20),transparent_42%)] dark:opacity-50 dark:group-hover/card:opacity-90" />
 
       <span className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
-        <span className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-[#153e90]/40 to-[#54e346]/40" />
+        <span className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-[#153e90]/35 to-[#54e346]/35 dark:via-[#153e90]/40 dark:to-[#54e346]/40" />
       </span>
 
       <div className="relative z-10 flex flex-col gap-6">{children}</div>

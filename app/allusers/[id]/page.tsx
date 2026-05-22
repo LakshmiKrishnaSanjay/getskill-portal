@@ -160,6 +160,24 @@ export default function UserDetailsPage() {
     }))
   }, [roleDetails])
 
+  const tableWrapperClass =
+    'overflow-hidden border border-[#153e90]/25 bg-white/70 text-[#153e90] shadow-[0_0_24px_rgba(21,62,144,0.06)] dark:border-[#153e90]/35 dark:bg-[#111827]/45 dark:text-white'
+
+  const tableHeaderClass =
+    'grid gap-2 border-b border-[#153e90]/25 bg-[#153e90]/10 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#153e90]/80 dark:border-[#153e90]/35 dark:bg-[#111827]/80 dark:text-white/70 md:grid-cols-[180px_1fr]'
+
+  const tableRowClass =
+    'grid gap-2 bg-white/50 px-4 py-3 transition hover:bg-[#153e90]/10 dark:bg-[#111827]/40 dark:hover:bg-[#153e90]/10 md:grid-cols-[180px_1fr]'
+
+  const tableLabelClass =
+    'text-sm font-medium text-[#153e90]/70 dark:text-white/70'
+
+  const tableValueClass =
+    'break-all text-sm text-[#153e90] dark:text-white'
+
+  const infoBoxClass =
+    'border border-[#153e90]/25 bg-white/70 p-4 text-sm text-[#153e90]/70 dark:border-[#153e90]/35 dark:bg-[#111827]/45 dark:text-white/70'
+
   if (loading) {
     return (
       <AppShell>
@@ -173,7 +191,7 @@ export default function UserDetailsPage() {
 
           <Card>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[#153e90]/70 dark:text-white/70">
                 Loading user details...
               </p>
             </CardContent>
@@ -208,7 +226,7 @@ export default function UserDetailsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-6 text-[#153e90] dark:text-white">
         <div>
           <Button asChild variant="outline" size="sm" className="mb-4">
             <Link href="/allusers">
@@ -217,8 +235,10 @@ export default function UserDetailsPage() {
             </Link>
           </Button>
 
-          <h1 className="text-3xl font-bold tracking-tight">User Details</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-[#153e90] dark:text-white">
+            User Details
+          </h1>
+          <p className="mt-2 text-[#153e90]/70 dark:text-white/60">
             Full profile dashboard for selected user.
           </p>
         </div>
@@ -226,7 +246,7 @@ export default function UserDetailsPage() {
         <Card>
           <CardContent>
             <div className="flex flex-col gap-6 md:flex-row md:items-center">
-              <div className="relative h-24 w-24 overflow-hidden border border-[#153e90]/35 bg-[#111827]/70">
+              <div className="relative h-24 w-24 overflow-hidden border border-[#153e90]/25 bg-[#153e90]/10 dark:border-[#153e90]/35 dark:bg-[#111827]/70">
                 {profile.avatar_url ? (
                   <Image
                     src={profile.avatar_url}
@@ -235,7 +255,7 @@ export default function UserDetailsPage() {
                     className="object-cover"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-white">
+                  <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-[#153e90] dark:text-white">
                     {profile.full_name
                       .split(' ')
                       .map((name) => name[0])
@@ -247,10 +267,14 @@ export default function UserDetailsPage() {
               </div>
 
               <div className="flex-1">
-                <h2 className="text-2xl font-bold">{profile.full_name}</h2>
-                <p className="mt-1 text-muted-foreground">{profile.email}</p>
+                <h2 className="text-2xl font-bold text-[#153e90] dark:text-white">
+                  {profile.full_name}
+                </h2>
+                <p className="mt-1 text-[#153e90]/70 dark:text-white/60">
+                  {profile.email}
+                </p>
 
-                <div className="mt-4 inline-flex items-center border border-border px-3 py-1.5 text-sm font-medium text-white">
+                <div className="mt-4 inline-flex items-center border border-[#153e90]/25 bg-[#153e90]/10 px-3 py-1.5 text-sm font-medium text-[#153e90] dark:border-border dark:bg-white/5 dark:text-white">
                   {getRoleLabel(profile.role)}
                 </div>
               </div>
@@ -261,28 +285,23 @@ export default function UserDetailsPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
+              <CardTitle className="text-[#153e90] dark:text-white">
+                Profile Information
+              </CardTitle>
             </CardHeader>
 
             <CardContent>
-              <div className="overflow-hidden border border-[#153e90]/35 bg-[#111827]/45">
-                <div className="grid gap-2 border-b border-[#153e90]/35 bg-[#111827]/80 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/70 md:grid-cols-[180px_1fr]">
+              <div className={tableWrapperClass}>
+                <div className={tableHeaderClass}>
                   <div>Field</div>
                   <div>Details</div>
                 </div>
 
-                <div className="divide-y divide-[#153e90]/20">
+                <div className="divide-y divide-[#153e90]/15 dark:divide-[#153e90]/20">
                   {profileRows.map((row) => (
-                    <div
-                      key={row.label}
-                      className="grid gap-2 bg-[#111827]/40 px-4 py-3 transition hover:bg-[#153e90]/10 md:grid-cols-[180px_1fr]"
-                    >
-                      <div className="text-sm font-medium text-white/70">
-                        {row.label}
-                      </div>
-                      <div className="break-all text-sm text-white">
-                        {row.value}
-                      </div>
+                    <div key={row.label} className={tableRowClass}>
+                      <div className={tableLabelClass}>{row.label}</div>
+                      <div className={tableValueClass}>{row.value}</div>
                     </div>
                   ))}
                 </div>
@@ -292,7 +311,7 @@ export default function UserDetailsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="text-[#153e90] dark:text-white">
                 {profile.role === 'student'
                   ? 'Student Details'
                   : profile.role === 'mentor'
@@ -303,30 +322,23 @@ export default function UserDetailsPage() {
 
             <CardContent>
               {roleDetailRows.length > 0 ? (
-                <div className="overflow-hidden border border-[#153e90]/35 bg-[#111827]/45">
-                  <div className="grid gap-2 border-b border-[#153e90]/35 bg-[#111827]/80 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/70 md:grid-cols-[180px_1fr]">
+                <div className={tableWrapperClass}>
+                  <div className={tableHeaderClass}>
                     <div>Field</div>
                     <div>Details</div>
                   </div>
 
-                  <div className="divide-y divide-[#153e90]/20">
+                  <div className="divide-y divide-[#153e90]/15 dark:divide-[#153e90]/20">
                     {roleDetailRows.map((row) => (
-                      <div
-                        key={row.label}
-                        className="grid gap-2 bg-[#111827]/40 px-4 py-3 transition hover:bg-[#153e90]/10 md:grid-cols-[180px_1fr]"
-                      >
-                        <div className="text-sm font-medium text-white/70">
-                          {row.label}
-                        </div>
-                        <div className="break-all text-sm text-white">
-                          {row.value}
-                        </div>
+                      <div key={row.label} className={tableRowClass}>
+                        <div className={tableLabelClass}>{row.label}</div>
+                        <div className={tableValueClass}>{row.value}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               ) : (
-                <div className="border border-[#153e90]/35 bg-[#111827]/45 p-4 text-sm text-muted-foreground">
+                <div className={infoBoxClass}>
                   No additional role details added yet.
                 </div>
               )}
@@ -337,10 +349,12 @@ export default function UserDetailsPage() {
         {profile.role === 'placement' && (
           <Card>
             <CardHeader>
-              <CardTitle>Placement Access</CardTitle>
+              <CardTitle className="text-[#153e90] dark:text-white">
+                Placement Access
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="border border-[#153e90]/35 bg-[#111827]/45 p-4 text-sm text-muted-foreground">
+              <div className={infoBoxClass}>
                 This user can review student portfolio and career readiness
                 data.
               </div>
@@ -351,10 +365,12 @@ export default function UserDetailsPage() {
         {profile.role === 'admin' && (
           <Card>
             <CardHeader>
-              <CardTitle>Admin Access</CardTitle>
+              <CardTitle className="text-[#153e90] dark:text-white">
+                Admin Access
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="border border-[#153e90]/35 bg-[#111827]/45 p-4 text-sm text-muted-foreground">
+              <div className={infoBoxClass}>
                 This user can manage institution operations such as students,
                 mentors, cohorts, admissions, attendance, analytics, and payment
                 records.

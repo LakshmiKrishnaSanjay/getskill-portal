@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -27,10 +28,9 @@ import {
   UserCog,
   Shield,
   ShieldCheck,
-  UserCheck,
-  Briefcase,
   BriefcaseBusiness,
-  Users,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import type { Role } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
@@ -56,94 +56,87 @@ const navigation: NavItem[] = [
   {
     title: 'Dashboard',
     href: '/dashboard',
-    icon: '/icons/light-mode/dashboard.svg',
+    icon: 'dashboard.svg',
     roles: ['superadmin', 'student', 'mentor', 'admin', 'placement'],
   },
-    {
+  {
     title: 'Workstreams',
     href: '/workstreams',
-    icon: '/icons/light-mode/workstream.svg',
+    icon: 'workstream.svg',
     roles: ['superadmin', 'student', 'mentor', 'admin'],
+  },
+  {
+    title: 'Add Courses',
+    href: '/courses',
+    icon: 'courses.svg',
+    roles: ['superadmin', 'admin'],
   },
   {
     title: 'All Users',
     href: '/allusers',
-    icon: '/icons/light-mode/users.svg',
+    icon: 'users.svg',
     roles: ['superadmin'],
   },
-    {
+  {
     title: 'Students',
     href: '/students',
-    icon: '/icons/light-mode/students.svg',
+    icon: 'students.svg',
     roles: ['superadmin', 'admin', 'mentor'],
   },
   {
     title: 'Mentors',
     href: '/mentors',
-    icon: '',
-    fallbackIcon: UserCheck,
+    icon: 'mentors.svg',
     roles: ['superadmin', 'admin'],
-  }, 
+  },
   {
     title: 'Cohorts',
     href: '/cohorts',
-    icon: '/icons/light-mode/patch.svg',
-    fallbackIcon: Users,
+    icon: 'patch.svg',
     roles: ['superadmin', 'admin', 'mentor'],
   },
   {
     title: 'Attendance',
     href: '/attendance',
-    icon: '/icons/light-mode/attendance.svg',
+    icon: 'attendance.svg',
     roles: ['superadmin', 'student', 'mentor', 'admin'],
   },
-
   {
     title: 'Tasks',
     href: '/tasks',
-    icon: '/icons/light-mode/tasks.svg',
+    icon: 'tasks.svg',
     roles: ['superadmin', 'student', 'mentor'],
   },
   {
     title: 'Submissions',
     href: '/submissions',
-    icon: '/icons/light-mode/submissions.svg',
+    icon: 'submissions.svg',
     roles: ['superadmin', 'student', 'mentor'],
   },
   {
     title: 'Reviews',
     href: '/reviews',
-    icon: '/icons/light-mode/reviews.svg',
+    icon: 'reviews.svg',
     roles: ['superadmin', 'mentor'],
   },
   {
     title: 'Portfolio',
     href: '/portfolio',
-    icon: '',
-    fallbackIcon: Briefcase,
+    icon: 'portfolio.svg',
     roles: ['superadmin', 'student', 'placement'],
   },
   {
     title: 'Career',
     href: '/career',
-    icon: '',
-    fallbackIcon: GraduationCap,
+    icon: 'career.svg',
     roles: ['superadmin', 'student', 'placement'],
   },
-
   {
     title: 'Analytics',
     href: '/analytics',
-    icon: '/icons/light-mode/analytics.svg',
+    icon: 'analytics.svg',
     roles: ['superadmin', 'admin', 'mentor'],
   },
-  // {
-  //   title: 'Admissions',
-  //   href: '/admissions',
-  //   icon: '',
-  //   fallbackIcon: UserCog,
-  //   roles: ['superadmin', 'admin'],
-  // },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -152,15 +145,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     null
   )
   const [imageVersion, setImageVersion] = useState(Date.now())
+  const [storedRole, setStoredRole] = useState<Role | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
 
   const pathname = usePathname()
   const router = useRouter()
   const { notifications } = useData()
+  const { resolvedTheme, setTheme } = useTheme()
+
+  const activeIconFolder =
+    isMounted && resolvedTheme === 'light' ? 'dark-mode' : 'light-mode'
+
+  const logoSrc =
+    isMounted && resolvedTheme === 'light'
+      ? '/pixlpluz-dark-logo.svg'
+      : '/pixlpluz-white-logo.svg'
 
   const unreadCount = notifications.filter((n) => !n.read).length
-
-  const [storedRole, setStoredRole] = useState<Role | null>(null)
-  const [isMounted, setIsMounted] = useState(false)
 
   const fetchBackendProfile = async () => {
     const { data: userData } = await supabase.auth.getUser()
@@ -210,16 +211,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       profile_picture_url: profilePictureUrl,
     })
   }
-  
+
   useEffect(() => {
-  setIsMounted(true)
+    setIsMounted(true)
 
-  const savedRole = localStorage.getItem('getskill-role') as Role | null
+    const savedRole = localStorage.getItem('getskill-role') as Role | null
 
-  if (savedRole) {
-    setStoredRole(savedRole)
-  }
-}, [])
+    if (savedRole) {
+      setStoredRole(savedRole)
+    }
+  }, [])
 
   useEffect(() => {
     fetchBackendProfile()
@@ -254,9 +255,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .slice(0, 2)
     .toUpperCase()
 
-const filteredNavigation = activeRole
-  ? navigation.filter((item) => item.roles.includes(activeRole))
-  : []
+  const filteredNavigation = activeRole
+    ? navigation.filter((item) => item.roles.includes(activeRole))
+    : []
 
   const getRoleIcon = (role: Role) => {
     switch (role) {
@@ -326,7 +327,7 @@ const filteredNavigation = activeRole
           {!sidebarCollapsed && (
             <Link href="/dashboard" className="flex items-center">
               <Image
-                src="/main-logo.svg"
+                src={logoSrc}
                 alt="Pixel Pluz"
                 width={140}
                 height={40}
@@ -361,15 +362,15 @@ const filteredNavigation = activeRole
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                 isActive
+                 ? 'border-l-4 border-[#153e90] bg-[#153e90]/10 text-[#153e90] dark:border-[#6ee75a] dark:bg-black dark:text-white'
+                 : 'border-l-4 border-transparent text-[#153e90] hover:bg-slate-100 hover:text-[#153e90] dark:text-white dark:hover:bg-black dark:hover:text-white',
                   sidebarCollapsed && 'justify-center'
                 )}
               >
                 {item.icon ? (
                   <Image
-                    src={item.icon}
+                    src={`/icons/${activeIconFolder}/${item.icon}`}
                     alt={item.title}
                     width={20}
                     height={20}
@@ -404,12 +405,29 @@ const filteredNavigation = activeRole
           <div className="flex max-w-xl flex-1 items-center gap-4"></div>
 
           <div className="flex items-center gap-4">
+
+            <Button
+  type="button"
+  variant="outline"
+  size="icon"
+  onClick={() => setTheme(resolvedTheme === 'light' ? 'dark' : 'light')}
+  className="h-9 w-9 border-[#153e90]/25 bg-white text-[#153e90] hover:bg-[#153e90]/10 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+  aria-label="Toggle theme"
+>
+  {isMounted && resolvedTheme === 'light' ? (
+    <Moon className="h-4 w-4" />
+  ) : (
+    <Sun className="h-4 w-4" />
+  )}
+</Button>
+
+
             {activeRole && (
-  <Button variant="outline" size="sm" className="gap-2 cursor-default">
-    {getRoleIcon(activeRole)}
-    <span className="hidden sm:inline">{getRoleLabel(activeRole)}</span>
-  </Button>
-)}
+              <Button variant="outline" size="sm" className="gap-2 cursor-default">
+                {getRoleIcon(activeRole)}
+                <span className="hidden sm:inline">{getRoleLabel(activeRole)}</span>
+              </Button>
+            )}
 
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />

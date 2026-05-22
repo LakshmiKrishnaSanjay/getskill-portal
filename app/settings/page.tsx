@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTheme } from 'next-themes'
 import { AppShell } from '@/components/app-shell'
 import {
   Card,
@@ -34,6 +35,9 @@ const addCacheBust = (url: string) => {
 }
 
 export default function SettingsPage() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
   const [profile, setProfile] = useState<Profile | null>(null)
 
   const [fullName, setFullName] = useState('')
@@ -95,6 +99,7 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
+    setMounted(true)
     fetchSettings()
   }, [])
 
@@ -509,12 +514,18 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>Dark Mode</Label>
+                    <Label>White Mode</Label>
                     <p className="text-sm text-muted-foreground">
-                      The portal is currently using your project theme.
+                      Turn on white mode for a lighter portal appearance.
                     </p>
                   </div>
-                  <Switch defaultChecked disabled />
+
+                  <Switch
+                    checked={mounted ? theme === 'light' : false}
+                    onCheckedChange={(checked) =>
+                      setTheme(checked ? 'light' : 'dark')
+                    }
+                  />
                 </div>
               </CardContent>
             </Card>
