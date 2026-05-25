@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     if (
       callerProfileError ||
       !callerProfile ||
-      !['admin', 'superadmin'].includes(callerProfile.role)
+      !['admin', 'superadmin', 'super admin'].includes(callerProfile.role)
     ) {
       return NextResponse.json(
         { error: 'Only Admin and Super Admin can create mentors.' },
@@ -48,6 +48,12 @@ export async function POST(request: Request) {
     const fullName = String(formData.get('fullName') || '').trim()
     const email = String(formData.get('email') || '').trim().toLowerCase()
     const password = String(formData.get('password') || '').trim()
+    const manualMentorCode = String(
+      formData.get('manualMentorCode') || ''
+    )
+      .trim()
+      .toUpperCase()
+    const dateOfJoining = String(formData.get('dateOfJoining') || '').trim()
     const specialization = String(formData.get('specialization') || '').trim()
     const courseId = String(formData.get('courseId') || '').trim()
     const profileImage = formData.get('profileImage') as File | null
@@ -86,6 +92,21 @@ export async function POST(request: Request) {
       )
     }
 
+    if (manualMentorCode) {
+      const { data: existingMentorCode } = await supabaseAdmin
+        .from('mentors')
+        .select('id')
+        .eq('manual_mentor_code', manualMentorCode)
+        .maybeSingle()
+
+      if (existingMentorCode) {
+        return NextResponse.json(
+          { error: 'This mentor code is already used.' },
+          { status: 409 }
+        )
+      }
+    }
+
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.admin.createUser({
         email,
@@ -111,7 +132,7 @@ export async function POST(request: Request) {
 
     if (profileImage && profileImage.size > 0) {
       const fileExt = profileImage.name.split('.').pop() || 'jpg'
-      const filePath = `${userId}/profile.${fileExt}`
+      const filePath = `${userId}/profile-${Date.now()}.${fileExt}`
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from('mentor-profiles')
@@ -165,6 +186,8 @@ export async function POST(request: Request) {
       .insert({
         profile_id: userId,
         mentor_code: mentorCode,
+        manual_mentor_code: manualMentorCode || null,
+        date_of_joining: dateOfJoining || null,
         course_id: courseId,
         specialization: specialization || null,
         profile_picture_url: profilePictureUrl,

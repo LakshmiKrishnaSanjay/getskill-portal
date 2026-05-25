@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Pencil, Save, X } from 'lucide-react'
@@ -85,6 +85,8 @@ export default function MentorDetailsPage() {
   const [editMode, setEditMode] = useState(false)
   const [error, setError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
+  const [profileImagePreview, setProfileImagePreview] = useState('')
 
   const [editForm, setEditForm] = useState<EditForm>({
     full_name: '',
@@ -208,6 +210,9 @@ export default function MentorDetailsPage() {
         date_of_joining: finalMentor.date_of_joining || '',
       })
 
+      setProfileImageFile(null)
+      setProfileImagePreview('')
+
       setLoading(false)
     }
 
@@ -216,11 +221,35 @@ export default function MentorDetailsPage() {
     }
   }, [mentorId, router])
 
+  const handleProfileImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+
+    setSaveError('')
+
+    if (!file) {
+      setProfileImageFile(null)
+      setProfileImagePreview('')
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setSaveError('Please upload a valid image file.')
+      setProfileImageFile(null)
+      setProfileImagePreview('')
+      return
+    }
+
+    setProfileImageFile(file)
+    setProfileImagePreview(URL.createObjectURL(file))
+  }
+
   const handleCancelEdit = () => {
     if (!mentor) return
 
     setSaveError('')
     setEditMode(false)
+    setProfileImageFile(null)
+    setProfileImagePreview('')
 
     setEditForm({
       full_name: mentor.profiles?.full_name || '',
@@ -238,10 +267,38 @@ export default function MentorDetailsPage() {
     setSaving(true)
     setSaveError('')
 
+    let uploadedProfileImageUrl =
+      mentor.profile_picture_url || mentor.profiles?.avatar_url || null
+
+    if (profileImageFile) {
+      const fileExt = profileImageFile.name.split('.').pop() || 'jpg'
+      const filePath = `${mentor.profile_id}/profile-${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('mentor-profiles')
+        .upload(filePath, profileImageFile, {
+          upsert: true,
+          contentType: profileImageFile.type,
+        })
+
+      if (uploadError) {
+        setSaveError(uploadError.message)
+        setSaving(false)
+        return
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('mentor-profiles')
+        .getPublicUrl(filePath)
+
+      uploadedProfileImageUrl = publicUrlData.publicUrl
+    }
+
     const { error: profileUpdateError } = await supabase
       .from('profiles')
       .update({
         full_name: editForm.full_name.trim(),
+        avatar_url: uploadedProfileImageUrl,
       })
       .eq('id', mentor.profile_id)
 
@@ -259,6 +316,7 @@ export default function MentorDetailsPage() {
         status: editForm.status || 'active',
         course_id: editForm.course_id || null,
         date_of_joining: editForm.date_of_joining || null,
+        profile_picture_url: uploadedProfileImageUrl,
       })
       .eq('id', mentor.id)
 
@@ -278,15 +336,19 @@ export default function MentorDetailsPage() {
       status: editForm.status || 'active',
       course_id: editForm.course_id || null,
       date_of_joining: editForm.date_of_joining || null,
+      profile_picture_url: uploadedProfileImageUrl,
       courses: selectedCourse,
       profiles: mentor.profiles
         ? {
             ...mentor.profiles,
             full_name: editForm.full_name.trim(),
+            avatar_url: uploadedProfileImageUrl,
           }
         : mentor.profiles,
     })
 
+    setProfileImageFile(null)
+    setProfileImagePreview('')
     setEditMode(false)
     setSaving(false)
   }
@@ -440,14 +502,14 @@ export default function MentorDetailsPage() {
           mentor.status || 'active'
         ),
       },
-      // {
-      //   label: 'Mentor Created Date',
-      //   value: mentor.created_at
-      //     ? new Date(mentor.created_at).toLocaleString()
-      //     : null,
-      // },
     ]
   }, [mentor, editMode, editForm, courses, inputClass, optionClass])
+
+  const displayedProfileImage =
+    profileImagePreview ||
+    mentor?.profile_picture_url ||
+    mentor?.profiles?.avatar_url ||
+    ''
 
   if (loading) {
     return (
@@ -556,13 +618,9 @@ export default function MentorDetailsPage() {
           <CardContent>
             <div className="flex flex-col gap-6 md:flex-row md:items-center">
               <div className="h-24 w-24 shrink-0 overflow-hidden border border-[#153e90]/25 bg-[#153e90]/10 dark:border-[#153e90]/35 dark:bg-[#111827]/70">
-                {mentor.profile_picture_url || mentor.profiles?.avatar_url ? (
+                {displayedProfileImage ? (
                   <img
-                    src={
-                      mentor.profile_picture_url ||
-                      mentor.profiles?.avatar_url ||
-                      ''
-                    }
+                    src={displayedProfileImage}
                     alt={mentor.profiles?.full_name || 'Mentor'}
                     className="h-full w-full object-cover"
                   />
@@ -586,6 +644,26 @@ export default function MentorDetailsPage() {
                 <p className={`mt-1 ${mutedTextClass}`}>
                   {mentor.profiles?.email || 'No email'}
                 </p>
+
+                {editMode && (
+                  <div className="mt-4 max-w-sm">
+                    <label className="mb-2 block text-sm font-medium text-[#153e90]/70 dark:text-white/70">
+                      Edit Profile Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfileImageChange}
+                      className={inputClass}
+                      disabled={saving}
+                    />
+                    {profileImageFile && (
+                      <p className={`mt-2 text-xs ${mutedTextClass}`}>
+                        Selected: {profileImageFile.name}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <span className="inline-flex border border-[#153e90]/25 bg-white/60 px-3 py-1.5 text-sm font-medium text-[#153e90] dark:border-white/10 dark:bg-white/10 dark:text-white">

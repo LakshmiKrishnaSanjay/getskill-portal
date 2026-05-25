@@ -24,6 +24,7 @@ type Course = {
 type Mentor = {
   id: string
   mentor_code: string | null
+  manual_mentor_code: string | null
   specialization: string | null
   profiles: {
     full_name: string
@@ -36,6 +37,7 @@ type Cohort = {
   name: string
   cohort_code: string | null
   description: string | null
+  duration_months: number | null
   start_date: string | null
   end_date: string | null
   status: string
@@ -53,6 +55,7 @@ type Cohort = {
   } | null
   mentors: {
     mentor_code: string | null
+    manual_mentor_code: string | null
     profiles: {
       full_name: string
       email: string
@@ -67,6 +70,24 @@ type CurrentProfile = {
 }
 
 type BatchMode = 'online' | 'offline'
+
+
+const calculateEndDateFromDuration = (startDateValue: string, durationMonthValue: string) => {
+  if (!startDateValue || !durationMonthValue) return ''
+
+  const monthCount = Number(durationMonthValue)
+
+  if (!monthCount || monthCount < 1) return ''
+
+  const date = new Date(`${startDateValue}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) return ''
+
+  date.setMonth(date.getMonth() + monthCount)
+  date.setDate(date.getDate() - 1)
+
+  return date.toISOString().split('T')[0]
+}
 
 const formatTimeForBatchCode = (time: string) => {
   if (!time) return 'TIME'
@@ -112,7 +133,6 @@ const cleanCodePart = (value: string | null | undefined, fallback: string) => {
 const getBatchNumber = (
   cohorts: Cohort[],
   courseCode: string,
-  mentorCode: string,
   mode: string,
   batchStartTime: string,
   startDate: string
@@ -121,7 +141,7 @@ const getBatchNumber = (
   const timeCode = formatTimeForBatchCode(batchStartTime)
   const monthYearCode = formatMonthYearForBatchCode(startDate)
 
-  const prefix = `PP-${courseCode}-${mentorCode}-${modeCode}-${timeCode}-${monthYearCode}`
+  const prefix = `PP-${courseCode}-${modeCode}-${timeCode}-${monthYearCode}`
 
   const matchingCohorts = cohorts.filter((cohort) => {
     return cohort.cohort_code?.startsWith(prefix)
@@ -140,12 +160,21 @@ export default function CohortsPage() {
   const [mentors, setMentors] = useState<Mentor[]>([])
 
   const [search, setSearch] = useState('')
+  const [filterCourse, setFilterCourse] = useState('all')
+  const [filterMode, setFilterMode] = useState('all')
+  const [filterMentor, setFilterMentor] = useState('all')
+  const [filterYear, setFilterYear] = useState('all')
+  const [filterMonth, setFilterMonth] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterStartTime, setFilterStartTime] = useState('all')
+  const [filterDuration, setFilterDuration] = useState('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [courseId, setCourseId] = useState('')
   const [mentorId, setMentorId] = useState('')
+  const [durationMonths, setDurationMonths] = useState('1')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [batchMode, setBatchMode] = useState<BatchMode>('offline')
@@ -183,7 +212,6 @@ export default function CohortsPage() {
 
   const generateCohortCode = (
     selectedCourseCode?: string,
-    selectedMentorCode?: string | null,
     selectedMode?: string,
     selectedTime?: string,
     selectedStartDate?: string
@@ -191,11 +219,6 @@ export default function CohortsPage() {
     const courseCode = cleanCodePart(
       selectedCourseCode || selectedCourse?.code,
       'COURSE'
-    )
-
-    const mentorCode = cleanCodePart(
-      selectedMentorCode || selectedMentor?.mentor_code,
-      'MEN'
     )
 
     const mode = selectedMode || batchMode
@@ -209,13 +232,12 @@ export default function CohortsPage() {
     const batchNumber = getBatchNumber(
       cohorts,
       courseCode,
-      mentorCode,
       mode,
       time,
       date
     )
 
-    return `PP-${courseCode}-${mentorCode}-${modeCode}-${timeCode}-${monthYearCode}-${batchNumber}`
+    return `PP-${courseCode}-${modeCode}-${timeCode}-${monthYearCode}-${batchNumber}`
   }
 
   const fetchCurrentProfile = async () => {
@@ -274,6 +296,7 @@ export default function CohortsPage() {
       .select(`
         id,
         mentor_code,
+        manual_mentor_code,
         specialization,
         profiles!mentors_profile_id_fkey (
           full_name,
@@ -298,6 +321,7 @@ export default function CohortsPage() {
         name,
         cohort_code,
         description,
+        duration_months,
         start_date,
         end_date,
         status,
@@ -315,6 +339,7 @@ export default function CohortsPage() {
         ),
         mentors!cohorts_mentor_id_fkey (
           mentor_code,
+          manual_mentor_code,
           profiles!mentors_profile_id_fkey (
             full_name,
             email
@@ -392,11 +417,63 @@ export default function CohortsPage() {
     }
   }, [courseId, selectedCourse, name])
 
+  useEffect(() => {
+    const calculatedEndDate = calculateEndDateFromDuration(
+      startDate,
+      durationMonths
+    )
+
+    setEndDate(calculatedEndDate)
+  }, [startDate, durationMonths])
+
+  const getCohortYear = (dateValue: string | null) => {
+    if (!dateValue) return ''
+
+    const date = new Date(`${dateValue}T00:00:00`)
+
+    if (Number.isNaN(date.getTime())) return ''
+
+    return String(date.getFullYear())
+  }
+
+  const getCohortMonth = (dateValue: string | null) => {
+    if (!dateValue) return ''
+
+    const date = new Date(`${dateValue}T00:00:00`)
+
+    if (Number.isNaN(date.getTime())) return ''
+
+    return String(date.getMonth() + 1)
+  }
+
+  const formatTimeLabel = (timeValue: string | null) => {
+    if (!timeValue) return 'No start time'
+
+    const [hourValue, minuteValue] = timeValue.split(':')
+    const hour = Number(hourValue)
+    const minute = Number(minuteValue || '0')
+
+    if (Number.isNaN(hour)) return timeValue
+
+    const period = hour >= 12 ? 'PM' : 'AM'
+    const hour12 = hour % 12 || 12
+
+    return `${hour12}:${String(minute).padStart(2, '0')} ${period}`
+  }
+
   const filteredCohorts = useMemo(() => {
     return cohorts.filter((cohort) => {
       const keyword = search.toLowerCase().trim()
+      const enrolledCount = cohort.enrolled_count || 0
+      const maxSeatCount = cohort.max_seats || 0
+      const isFull = maxSeatCount > 0 && enrolledCount >= maxSeatCount
+      const cohortStatus = isFull ? 'completed' : cohort.status
+      const cohortYear = getCohortYear(cohort.start_date)
+      const cohortMonth = getCohortMonth(cohort.start_date)
+      const durationValue = cohort.duration_months ? String(cohort.duration_months) : ''
 
-      return (
+      const matchesSearch =
+        !keyword ||
         cohort.name.toLowerCase().includes(keyword) ||
         cohort.cohort_code?.toLowerCase().includes(keyword) ||
         cohort.description?.toLowerCase().includes(keyword) ||
@@ -404,21 +481,101 @@ export default function CohortsPage() {
         cohort.courses?.name?.toLowerCase().includes(keyword) ||
         cohort.courses?.code?.toLowerCase().includes(keyword) ||
         cohort.mentors?.profiles?.full_name?.toLowerCase().includes(keyword) ||
+        cohort.mentors?.manual_mentor_code?.toLowerCase().includes(keyword) ||
         cohort.mentors?.mentor_code?.toLowerCase().includes(keyword)
+
+      return (
+        matchesSearch &&
+        (filterCourse === 'all' || cohort.course_id === filterCourse) &&
+        (filterMode === 'all' || cohort.batch_mode === filterMode) &&
+        (filterMentor === 'all' || cohort.mentor_id === filterMentor) &&
+        (filterYear === 'all' || cohortYear === filterYear) &&
+        (filterMonth === 'all' || cohortMonth === filterMonth) &&
+        (filterStatus === 'all' || cohortStatus === filterStatus) &&
+        (filterStartTime === 'all' || cohort.batch_start_time === filterStartTime) &&
+        (filterDuration === 'all' || durationValue === filterDuration)
       )
     })
-  }, [cohorts, search])
+  }, [
+    cohorts,
+    search,
+    filterCourse,
+    filterMode,
+    filterMentor,
+    filterYear,
+    filterMonth,
+    filterStatus,
+    filterStartTime,
+    filterDuration,
+  ])
 
-  const totalSeats = useMemo(() => {
-    return cohorts.reduce((sum, cohort) => sum + Number(cohort.max_seats || 0), 0)
+  const cohortYearOptions = useMemo(() => {
+    return Array.from(
+      new Set(cohorts.map((cohort) => getCohortYear(cohort.start_date)).filter(Boolean))
+    ).sort((a, b) => Number(b) - Number(a))
   }, [cohorts])
 
+  const cohortMonthOptions = useMemo(() => {
+    return Array.from(
+      new Set(cohorts.map((cohort) => getCohortMonth(cohort.start_date)).filter(Boolean))
+    ).sort((a, b) => Number(a) - Number(b))
+  }, [cohorts])
+
+  const cohortStartTimeOptions = useMemo(() => {
+    return Array.from(
+      new Set(cohorts.map((cohort) => cohort.batch_start_time).filter(Boolean) as string[])
+    ).sort()
+  }, [cohorts])
+
+  const cohortDurationOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        cohorts
+          .map((cohort) => (cohort.duration_months ? String(cohort.duration_months) : ''))
+          .filter(Boolean)
+      )
+    ).sort((a, b) => Number(a) - Number(b))
+  }, [cohorts])
+
+  const totalSeats = useMemo(() => {
+    return filteredCohorts.reduce((sum, cohort) => sum + Number(cohort.max_seats || 0), 0)
+  }, [filteredCohorts])
+
   const totalEnrolled = useMemo(() => {
-    return cohorts.reduce(
+    return filteredCohorts.reduce(
       (sum, cohort) => sum + Number(cohort.enrolled_count || 0),
       0
     )
-  }, [cohorts])
+  }, [filteredCohorts])
+
+  const activeCohortsCount = useMemo(() => {
+    return filteredCohorts.filter((cohort) => cohort.status === 'active').length
+  }, [filteredCohorts])
+
+  const inactiveCohortsCount = useMemo(() => {
+    return filteredCohorts.filter((cohort) => cohort.status === 'inactive').length
+  }, [filteredCohorts])
+
+  const completedCohortsCount = useMemo(() => {
+    return filteredCohorts.filter((cohort) => {
+      const enrolledCount = cohort.enrolled_count || 0
+      const maxSeatCount = cohort.max_seats || 0
+
+      return cohort.status === 'completed' || (maxSeatCount > 0 && enrolledCount >= maxSeatCount)
+    }).length
+  }, [filteredCohorts])
+
+  const resetFilters = () => {
+    setSearch('')
+    setFilterCourse('all')
+    setFilterMode('all')
+    setFilterMentor('all')
+    setFilterYear('all')
+    setFilterMonth('all')
+    setFilterStatus('all')
+    setFilterStartTime('all')
+    setFilterDuration('all')
+  }
 
   const resetForm = () => {
     const firstCourse = courses[0]
@@ -428,6 +585,7 @@ export default function CohortsPage() {
     setCourseId(firstCourse?.id || '')
     setMentorId(firstMentor?.id || '')
     setDescription('')
+    setDurationMonths('1')
     setStartDate('')
     setEndDate('')
     setBatchMode('offline')
@@ -464,6 +622,12 @@ export default function CohortsPage() {
 
     if (!mentorId) {
       setError('Please select a teacher or mentor.')
+      setLoading(false)
+      return
+    }
+
+    if (!durationMonths || Number(durationMonths) < 1) {
+      setError('Please select batch duration.')
       setLoading(false)
       return
     }
@@ -518,7 +682,6 @@ export default function CohortsPage() {
 
     const finalCode = generateCohortCode(
       course.code,
-      mentor.mentor_code,
       batchMode,
       batchStartTime,
       startDate
@@ -528,6 +691,7 @@ export default function CohortsPage() {
       name,
       cohort_code: finalCode,
       description: description || null,
+      duration_months: Number(durationMonths),
       start_date: startDate || null,
       end_date: endDate || null,
       status,
@@ -606,66 +770,188 @@ export default function CohortsPage() {
           </p>
         )}
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-[#153e90] dark:text-white">
+              Filter Cohorts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <select
+                value={filterCourse}
+                onChange={(e) => setFilterCourse(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Courses
+                </option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id} className={optionClass}>
+                    {course.name} ({course.code})
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterMode}
+                onChange={(e) => setFilterMode(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  Online / Offline
+                </option>
+                <option value="online" className={optionClass}>
+                  Online
+                </option>
+                <option value="offline" className={optionClass}>
+                  Offline
+                </option>
+              </select>
+
+              <select
+                value={filterMentor}
+                onChange={(e) => setFilterMentor(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Mentors
+                </option>
+                {mentors.map((mentor) => (
+                  <option key={mentor.id} value={mentor.id} className={optionClass}>
+                    {mentor.profiles?.full_name || 'No name'}
+                    {mentor.manual_mentor_code ? ` (${mentor.manual_mentor_code})` : ''}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Years
+                </option>
+                {cohortYearOptions.map((year) => (
+                  <option key={year} value={year} className={optionClass}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Months
+                </option>
+                {cohortMonthOptions.map((month) => (
+                  <option key={month} value={month} className={optionClass}>
+                    {new Date(2026, Number(month) - 1, 1).toLocaleString('en-US', {
+                      month: 'long',
+                    })}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Status
+                </option>
+                <option value="active" className={optionClass}>
+                  Active
+                </option>
+                <option value="inactive" className={optionClass}>
+                  Inactive
+                </option>
+                <option value="completed" className={optionClass}>
+                  Completed / Full
+                </option>
+              </select>
+
+              <select
+                value={filterStartTime}
+                onChange={(e) => setFilterStartTime(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Start Times
+                </option>
+                {cohortStartTimeOptions.map((time) => (
+                  <option key={time} value={time} className={optionClass}>
+                    {formatTimeLabel(time)}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filterDuration}
+                onChange={(e) => setFilterDuration(e.target.value)}
+                className={inputClass}
+              >
+                <option value="all" className={optionClass}>
+                  All Durations
+                </option>
+                {cohortDurationOptions.map((duration) => (
+                  <option key={duration} value={duration} className={optionClass}>
+                    {duration} {duration === '1' ? 'Month' : 'Months'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-3 flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+                Clear Filters
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-[#153e90] dark:text-white">
+            <CardContent className="p-4">
+              <p className={`text-xs font-medium uppercase tracking-wide ${mutedTextClass}`}>
                 Total Cohorts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-[#153e90] dark:text-white">
-                {cohorts.length}
               </p>
-              <p className={`text-sm ${mutedTextClass}`}>Created batches</p>
+              <p className="mt-2 text-2xl font-bold text-[#153e90] dark:text-white">
+                {filteredCohorts.length}
+              </p>
+              <p className={`text-xs ${mutedTextClass}`}>Filtered batches</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-[#153e90] dark:text-white">
+            <CardContent className="p-4">
+              <p className={`text-xs font-medium uppercase tracking-wide ${mutedTextClass}`}>
                 Active Cohorts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-[#153e90] dark:text-white">
-                {cohorts.filter((cohort) => cohort.status === 'active').length}
               </p>
-              <p className={`text-sm ${mutedTextClass}`}>
-                Currently enrolling
+              <p className="mt-2 text-2xl font-bold text-[#153e90] dark:text-white">
+                {activeCohortsCount}
               </p>
+              <p className={`text-xs ${mutedTextClass}`}>Currently enrolling</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-[#153e90] dark:text-white">
-                Total Seats
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-[#153e90] dark:text-white">
-                {totalSeats}
+            <CardContent className="p-4">
+              <p className={`text-xs font-medium uppercase tracking-wide ${mutedTextClass}`}>
+                Inactive Cohorts
               </p>
-              <p className={`text-sm ${mutedTextClass}`}>Available capacity</p>
+              <p className="mt-2 text-2xl font-bold text-[#153e90] dark:text-white">
+                {inactiveCohortsCount}
+              </p>
+              <p className={`text-xs ${mutedTextClass}`}>Not currently active</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-[#153e90] dark:text-white">
-                Enrolled
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-[#153e90] dark:text-white">
-                {totalEnrolled}
-              </p>
-              <p className={`text-sm ${mutedTextClass}`}>
-                Students in cohorts
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
         <Card>
@@ -739,9 +1025,9 @@ export default function CohortsPage() {
                             </p>
 
                             <p>
-                              Mentor ID:{' '}
+                              Mentor Code:{' '}
                               <span className="font-medium text-[#153e90] dark:text-white">
-                                {cohort.mentors?.mentor_code || 'No mentor ID'}
+                                {cohort.mentors?.manual_mentor_code || 'No mentor code'}
                               </span>
                             </p>
 
@@ -759,6 +1045,15 @@ export default function CohortsPage() {
                               <span className="font-medium text-[#153e90] dark:text-white">
                                 {cohort.batch_start_time || 'No start time'} to{' '}
                                 {cohort.batch_end_time || 'No end time'}
+                              </span>
+                            </p>
+
+                            <p>
+                              Duration:{' '}
+                              <span className="font-medium text-[#153e90] dark:text-white">
+                                {cohort.duration_months
+                                  ? `${cohort.duration_months} ${cohort.duration_months === 1 ? 'month' : 'months'}`
+                                  : 'No duration'}
                               </span>
                             </p>
 
@@ -872,7 +1167,9 @@ export default function CohortsPage() {
                         className={optionClass}
                       >
                         {mentor.profiles?.full_name || 'No name'}
-                        {mentor.mentor_code ? ` (${mentor.mentor_code})` : ''}
+                        {mentor.manual_mentor_code
+                          ? ` (${mentor.manual_mentor_code})`
+                          : ''}
                       </option>
                     ))}
                   </select>
@@ -901,6 +1198,38 @@ export default function CohortsPage() {
                 />
               </div>
 
+              <div>
+                <label className={labelClass}>Batch Duration</label>
+                <select
+                  value={durationMonths}
+                  onChange={(e) => setDurationMonths(e.target.value)}
+                  className={inputClass}
+                  required
+                >
+                  <option value="1" className={optionClass}>
+                    1 Month
+                  </option>
+                  <option value="2" className={optionClass}>
+                    2 Months
+                  </option>
+                  <option value="3" className={optionClass}>
+                    3 Months
+                  </option>
+                  <option value="4" className={optionClass}>
+                    4 Months
+                  </option>
+                  <option value="5" className={optionClass}>
+                    5 Months
+                  </option>
+                  <option value="6" className={optionClass}>
+                    6 Months
+                  </option>
+                  <option value="12" className={optionClass}>
+                    12 Months
+                  </option>
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className={labelClass}>Batch Start Date</label>
@@ -922,6 +1251,9 @@ export default function CohortsPage() {
                     className={inputClass}
                     required
                   />
+                  <p className={`mt-2 text-xs ${mutedTextClass}`}>
+                    Auto-filled from duration. You can manually change it if needed.
+                  </p>
                 </div>
               </div>
 

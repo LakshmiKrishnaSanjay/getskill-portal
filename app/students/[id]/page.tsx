@@ -12,21 +12,12 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import type { Role } from '@/lib/types'
-import {
-  ArrowLeft,
-  CalendarCheck,
-  CheckCircle2,
-  AlertTriangle,
-  Flame,
-  FileText,
-  ListTodo,
-  Github,
-  Globe,
-} from 'lucide-react'
+
+type CurrentRole = Role | 'superadmin' | 'super admin' | 'placement'
 
 type Profile = {
   id: string
-  role: Role
+  role: CurrentRole
 }
 
 type Student = {
@@ -41,6 +32,7 @@ type Student = {
   profiles: {
     full_name: string
     email: string
+    avatar_url?: string | null
   } | null
   cohorts: {
     name: string
@@ -86,10 +78,62 @@ type Submission = {
   }[]
 }
 
+type CustomIconName =
+  | 'arrow-left'
+  | 'attendance'
+  | 'submissions'
+  | 'tasks'
+  | 'flame'
+  | 'github'
+  | 'globe'
+
+const CustomIcon = ({
+  name,
+  className = 'h-4 w-4',
+  alt = '',
+}: {
+  name: CustomIconName
+  className?: string
+  alt?: string
+}) => {
+  return (
+    <>
+      <img
+        src={`/icons/dark-mode/${name}.svg`}
+        alt={alt}
+        className={`${className} dark:hidden`}
+      />
+      <img
+        src={`/icons/light-mode/${name}.svg`}
+        alt={alt}
+        className={`hidden ${className} dark:block`}
+      />
+    </>
+  )
+}
+
 const STATUS_STYLES: Record<string, string> = {
   present: 'bg-green-500/10 text-green-400 border-green-500/20',
   late: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   absent: 'bg-red-500/10 text-red-400 border-red-500/20',
+}
+
+const canViewAllStudents = (role: CurrentRole) => {
+  return (
+    role === 'admin' ||
+    role === 'superadmin' ||
+    role === 'super admin' ||
+    role === 'placement'
+  )
+}
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return 'Not added'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Not added'
+
+  return date.toLocaleDateString()
 }
 
 export default function StudentProfilePage({
@@ -102,19 +146,14 @@ export default function StudentProfilePage({
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
   const [hasAccess, setHasAccess] = useState(false)
   const [student, setStudent] = useState<Student | null>(null)
-  const [attendanceRecords, setAttendanceRecords] = useState<
-    AttendanceRecord[]
-  >([])
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const checkProfileAccess = async (
-    profile: Profile,
-    studentData: Student
-  ) => {
-    if (profile.role === 'admin') {
+  const checkProfileAccess = async (profile: Profile, studentData: Student) => {
+    if (canViewAllStudents(profile.role)) {
       return true
     }
 
@@ -127,10 +166,21 @@ export default function StudentProfilePage({
         .from('mentors')
         .select('id')
         .eq('profile_id', profile.id)
-        .single()
+        .maybeSingle()
 
       if (!mentorData) {
         return false
+      }
+
+      const { data: directCohort } = await supabase
+        .from('cohorts')
+        .select('id')
+        .eq('id', studentData.cohort_id)
+        .eq('mentor_id', mentorData.id)
+        .maybeSingle()
+
+      if (directCohort) {
+        return true
       }
 
       const { data: assignedCohort } = await supabase
@@ -186,7 +236,8 @@ export default function StudentProfilePage({
         cohort_id,
         profiles (
           full_name,
-          email
+          email,
+          avatar_url
         ),
         cohorts (
           name,
@@ -202,7 +253,7 @@ export default function StudentProfilePage({
       return
     }
 
-    const realStudent = studentData as Student
+    const realStudent = studentData as unknown as Student
     const allowed = await checkProfileAccess(profile, realStudent)
 
     if (!allowed) {
@@ -256,30 +307,31 @@ export default function StudentProfilePage({
       .eq('student_id', id)
       .order('created_at', { ascending: false })
 
-    setSubmissions((submissionData || []) as Submission[])
+    setSubmissions((submissionData || []) as unknown as Submission[])
 
     setLoading(false)
   }
 
   useEffect(() => {
     fetchStudentProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const attendanceRate = useMemo(() => {
-    if (attendanceRecords.length === 0) return 0
+    if (attendanceRecords.length === 0) return 100
 
-    const attended = attendanceRecords.filter(
-      (record) => record.status === 'present' || record.status === 'late'
+    const presentCount = attendanceRecords.filter(
+      (record) => record.status === 'present'
     ).length
 
-    return Math.round((attended / attendanceRecords.length) * 100)
+    return Math.round((presentCount / attendanceRecords.length) * 100)
   }, [attendanceRecords])
 
   const streak = useMemo(() => {
     let count = 0
 
     for (const record of attendanceRecords) {
-      if (record.status === 'present' || record.status === 'late') {
+      if (record.status === 'present') {
         count++
       } else {
         break
@@ -287,6 +339,18 @@ export default function StudentProfilePage({
     }
 
     return count
+  }, [attendanceRecords])
+
+  const sessionsAttended = useMemo(() => {
+    return attendanceRecords.filter((record) => record.status === 'present').length
+  }, [attendanceRecords])
+
+  const absences = useMemo(() => {
+    return attendanceRecords.filter((record) => record.status === 'absent').length
+  }, [attendanceRecords])
+
+  const lateCount = useMemo(() => {
+    return attendanceRecords.filter((record) => record.status === 'late').length
   }, [attendanceRecords])
 
   const avgGrade = useMemo(() => {
@@ -327,13 +391,11 @@ export default function StudentProfilePage({
   if (error || !student || !hasAccess) {
     return (
       <AppShell>
-        <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <p className="text-muted-foreground">
-            {error || 'Student not found.'}
-          </p>
+        <div className="flex flex-col items-center justify-center gap-4 py-16">
+          <p className="text-muted-foreground">{error || 'Student not found.'}</p>
           <Button asChild variant="outline">
-            <Link href="/students">
-              <ArrowLeft className="mr-2 h-4 w-4" />
+            <Link href="/students" className="inline-flex items-center">
+              <CustomIcon name="arrow-left" className="mr-2 h-4 w-4" alt="" />
               Back to Students
             </Link>
           </Button>
@@ -350,166 +412,127 @@ export default function StudentProfilePage({
     .slice(0, 2)
     .toUpperCase()
 
+  const avatarUrl =
+    student.profile_picture_url || student.profiles?.avatar_url || '/avatar.svg'
+
   return (
     <AppShell>
-      <div className="flex flex-col gap-6 max-w-5xl">
+      <div className="w-full space-y-6 text-[#153e90] dark:text-white">
         <div>
-          <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
-            <Link href="/students">
-              <ArrowLeft className="mr-2 h-4 w-4" />
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="-ml-2 text-[#153e90]/70 hover:text-[#153e90] dark:text-white/60 dark:hover:text-white"
+          >
+            <Link href="/students" className="inline-flex items-center">
+              <CustomIcon name="arrow-left" className="mr-2 h-4 w-4" alt="" />
               All Students
             </Link>
           </Button>
         </div>
 
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          <Avatar className="h-20 w-20 shrink-0">
-            <AvatarImage src={student.profile_picture_url || ''} />
-            <AvatarFallback className="text-2xl">
-              {initials || 'ST'}
-            </AvatarFallback>
-          </Avatar>
+        <Card>
+          <CardContent className="p-5">
+            <div className="grid gap-5 xl:grid-cols-[1fr_360px] xl:items-center">
+              <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+                <Avatar className="h-20 w-20 shrink-0 border border-[#153e90]/20 bg-[#153e90]/10 dark:border-white/10 dark:bg-white/10">
+                  <AvatarImage src={avatarUrl} />
+                  <AvatarFallback className="text-2xl">{initials || 'ST'}</AvatarFallback>
+                </Avatar>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold">{fullName}</h1>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-2xl font-bold text-[#153e90] dark:text-white">
+                      {fullName}
+                    </h1>
 
-              <Badge variant="secondary">
-                {student.cohorts?.name || 'No Cohort'}
-              </Badge>
+                    <Badge variant="secondary">
+                      {student.cohorts?.name || 'No Cohort'}
+                    </Badge>
 
-              <Badge variant="outline">
-                {student.student_code}
-              </Badge>
+                    <Badge variant="outline">{student.student_code}</Badge>
 
-              <Badge
-                variant="outline"
-                className={cn(
-                  eligibility.eligible
-                    ? 'border-green-500/30 text-green-400'
-                    : 'border-yellow-500/30 text-yellow-400'
-                )}
-              >
-                {eligibility.eligible ? 'Internship Eligible' : 'Not Eligible'}
-              </Badge>
-            </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        eligibility.eligible
+                          ? 'border-green-500/30 text-green-400'
+                          : 'border-yellow-500/30 text-yellow-400'
+                      )}
+                    >
+                      {eligibility.eligible ? 'Internship Eligible' : 'Not Eligible'}
+                    </Badge>
+                  </div>
 
-            <p className="text-muted-foreground text-sm mt-1">
-              {student.profiles?.email || 'No email'}
-            </p>
+                  <div className="mt-2 grid gap-1 text-sm text-[#153e90]/70 dark:text-white/60">
+                    <p>{student.profiles?.email || 'No email'}</p>
+                    <p>Phone: {student.phone || 'No phone'}</p>
+                    <p>Joined: {formatDate(student.joining_date)}</p>
+                  </div>
+                </div>
+              </div>
 
-            <p className="text-sm text-muted-foreground mt-1">
-              Phone: {student.phone || 'No phone'}
-            </p>
-
-            <p className="text-sm text-muted-foreground mt-1">
-              Joined: {student.joining_date || 'No joining date'}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 shrink-0">
-            <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
-              <p className="text-xs text-muted-foreground">Attendance</p>
-              <p
-                className={cn(
-                  'text-xl font-bold mt-0.5',
-                  attendanceRate >= 75 ? 'text-green-400' : 'text-red-400'
-                )}
-              >
-                {attendanceRate}%
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
-              <p className="text-xs text-muted-foreground">Avg Grade</p>
-              <p className="text-xl font-bold mt-0.5">
-                {avgGrade > 0 ? `${avgGrade}%` : '—'}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card px-4 py-3 text-center">
-              <p className="text-xs text-muted-foreground">Tasks Done</p>
-              <p className="text-xl font-bold mt-0.5">{taskCompletion}%</p>
-            </div>
-          </div>
-        </div>
-
-        <Tabs defaultValue="attendance">
-          <TabsList>
-            <TabsTrigger value="attendance" className="gap-2">
-              <CalendarCheck className="h-4 w-4" />
-              Attendance
-            </TabsTrigger>
-
-            <TabsTrigger value="submissions" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Submissions
-            </TabsTrigger>
-
-            <TabsTrigger value="tasks" className="gap-2">
-              <ListTodo className="h-4 w-4" />
-              Tasks
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="attendance" className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <Card>
-                <CardContent className="pt-5">
-                  <p className="text-xs text-muted-foreground">Attendance Rate</p>
+              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-3">
+                <div className="border border-[#153e90]/25 bg-white/70 px-4 py-3 text-center dark:border-[#153e90]/35 dark:bg-[#111827]/45">
+                  <p className="text-xs text-[#153e90]/70 dark:text-white/60">Attendance</p>
                   <p
                     className={cn(
-                      'text-2xl font-bold mt-1',
+                      'mt-0.5 text-xl font-bold',
                       attendanceRate >= 75 ? 'text-green-400' : 'text-red-400'
                     )}
                   >
                     {attendanceRate}%
                   </p>
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card>
-                <CardContent className="pt-5">
-                  <p className="text-xs text-muted-foreground">Current Streak</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <Flame
-                      className={cn(
-                        'h-5 w-5',
-                        streak > 0 ? 'text-orange-400' : 'text-muted-foreground'
-                      )}
-                    />
-                    <p className="text-2xl font-bold">{streak}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-5">
-                  <p className="text-xs text-muted-foreground">Sessions Attended</p>
-                  <p className="text-2xl font-bold mt-1">
-                    {
-                      attendanceRecords.filter(
-                        (record) => record.status !== 'absent'
-                      ).length
-                    }
-                    /{attendanceRecords.length}
+                <div className="border border-[#153e90]/25 bg-white/70 px-4 py-3 text-center dark:border-[#153e90]/35 dark:bg-[#111827]/45">
+                  <p className="text-xs text-[#153e90]/70 dark:text-white/60">Avg Grade</p>
+                  <p className="mt-0.5 text-xl font-bold text-[#153e90] dark:text-white">
+                    {avgGrade > 0 ? `${avgGrade}%` : '—'}
                   </p>
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card>
-                <CardContent className="pt-5">
-                  <p className="text-xs text-muted-foreground">Absences</p>
-                  <p className="text-2xl font-bold mt-1 text-red-400">
-                    {
-                      attendanceRecords.filter(
-                        (record) => record.status === 'absent'
-                      ).length
-                    }
+                <div className="border border-[#153e90]/25 bg-white/70 px-4 py-3 text-center dark:border-[#153e90]/35 dark:bg-[#111827]/45">
+                  <p className="text-xs text-[#153e90]/70 dark:text-white/60">Tasks Done</p>
+                  <p className="mt-0.5 text-xl font-bold text-[#153e90] dark:text-white">
+                    {taskCompletion}%
                   </p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Tabs defaultValue="attendance" className="w-full">
+<TabsList className="flex flex-wrap gap-3 bg-transparent p-0">
+  <TabsTrigger
+    value="attendance"
+    className="gap-2 border border-transparent bg-white/70 px-4 py-2 text-[#153e90] data-[state=active]:border-[#60a5fa] data-[state=active]:bg-[#60a5fa]/10 dark:bg-[#111827]/70 dark:text-white dark:data-[state=active]:border-green-500 dark:data-[state=active]:bg-green-500/10"
+  >
+    <CustomIcon name="attendance" className="h-4 w-4" alt="" />
+    Attendance
+  </TabsTrigger>
+
+  <TabsTrigger
+    value="submissions"
+    className="gap-2 border border-transparent bg-white/70 px-4 py-2 text-[#153e90] data-[state=active]:border-[#60a5fa] data-[state=active]:bg-[#60a5fa]/10 dark:bg-[#111827]/70 dark:text-white dark:data-[state=active]:border-green-500 dark:data-[state=active]:bg-green-500/10"
+  >
+    <CustomIcon name="submissions" className="h-4 w-4" alt="" />
+    Submissions
+  </TabsTrigger>
+
+  <TabsTrigger
+    value="tasks"
+    className="gap-2 border border-transparent bg-white/70 px-4 py-2 text-[#153e90] data-[state=active]:border-[#60a5fa] data-[state=active]:bg-[#60a5fa]/10 dark:bg-[#111827]/70 dark:text-white dark:data-[state=active]:border-green-500 dark:data-[state=active]:bg-green-500/10"
+  >
+    <CustomIcon name="tasks" className="h-4 w-4" alt="" />
+    Tasks
+  </TabsTrigger>
+</TabsList>
+
+          <TabsContent value="attendance" className="mt-4 space-y-4">
+
 
             <Card>
               <CardHeader>
@@ -524,7 +547,7 @@ export default function StudentProfilePage({
                   </div>
                   <Progress value={attendanceRate} />
                   <p className="text-xs text-muted-foreground">
-                    Minimum required attendance is 75%.
+                    Minimum required attendance is 75%. New students start at 100%; absent and late records reduce the percentage.
                   </p>
                 </div>
               </CardContent>
@@ -537,32 +560,25 @@ export default function StudentProfilePage({
 
               <CardContent>
                 {attendanceRecords.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No attendance records found.
-                  </p>
+                  <p className="text-sm text-muted-foreground">No attendance records found.</p>
                 ) : (
                   <div className="space-y-2">
                     {attendanceRecords.map((record) => (
                       <div
                         key={record.id}
-                        className="flex items-center justify-between rounded-lg border px-4 py-3"
+                        className="flex items-center justify-between border border-[#153e90]/20 px-4 py-3 dark:border-white/10"
                       >
                         <div>
-                          <p className="text-sm font-medium">
-                            {record.attendance_date}
-                          </p>
+                          <p className="text-sm font-medium">{record.attendance_date}</p>
                           {record.notes && (
-                            <p className="text-xs text-muted-foreground">
-                              {record.notes}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{record.notes}</p>
                           )}
                         </div>
 
                         <Badge
                           variant="outline"
                           className={cn(
-                            STATUS_STYLES[record.status] ||
-                              'bg-muted text-muted-foreground'
+                            STATUS_STYLES[record.status] || 'bg-muted text-muted-foreground'
                           )}
                         >
                           {record.status}
@@ -595,30 +611,27 @@ export default function StudentProfilePage({
                             {submission.tasks?.title || 'Untitled Task'}
                           </h3>
 
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="mt-1 text-sm text-muted-foreground">
                             Status: {submission.status}
                           </p>
 
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Submitted:{' '}
-                            {submission.submitted_at || submission.created_at}
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Submitted: {submission.submitted_at || submission.created_at}
                           </p>
 
                           {submission.submission_text && (
-                            <p className="text-sm mt-3">
-                              {submission.submission_text}
-                            </p>
+                            <p className="mt-3 text-sm">{submission.submission_text}</p>
                           )}
 
-                          <div className="flex gap-3 mt-3">
+                          <div className="mt-3 flex gap-3">
                             {submission.github_url && (
                               <a
                                 href={submission.github_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                               >
-                                <Github className="h-4 w-4" />
+                                <CustomIcon name="github" className="h-4 w-4" alt="" />
                                 GitHub
                               </a>
                             )}
@@ -628,9 +641,9 @@ export default function StudentProfilePage({
                                 href={submission.live_url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+                                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                               >
-                                <Globe className="h-4 w-4" />
+                                <CustomIcon name="globe" className="h-4 w-4" alt="" />
                                 Live
                               </a>
                             )}
@@ -640,20 +653,15 @@ export default function StudentProfilePage({
                         <div className="text-right">
                           <Badge variant="secondary">{submission.status}</Badge>
 
-                          {latestReview?.score !== null &&
-                            latestReview?.score !== undefined && (
-                              <p className="text-2xl font-bold mt-2">
-                                {latestReview.score}%
-                              </p>
-                            )}
+                          {latestReview?.score !== null && latestReview?.score !== undefined && (
+                            <p className="mt-2 text-2xl font-bold">{latestReview.score}%</p>
+                          )}
                         </div>
                       </div>
 
                       {latestReview?.feedback && (
-                        <div className="mt-4 rounded-lg border bg-muted/30 p-3">
-                          <p className="text-xs text-muted-foreground mb-1">
-                            Mentor Feedback
-                          </p>
+                        <div className="mt-4 border border-[#153e90]/20 bg-[#153e90]/5 p-3 dark:border-white/10 dark:bg-white/5">
+                          <p className="mb-1 text-xs text-muted-foreground">Mentor Feedback</p>
                           <p className="text-sm">{latestReview.feedback}</p>
                         </div>
                       )}
@@ -679,17 +687,16 @@ export default function StudentProfilePage({
                       <div>
                         <h3 className="font-semibold">{task.title}</h3>
 
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="mt-1 text-sm text-muted-foreground">
                           {task.description || 'No description'}
                         </p>
 
-                        <div className="flex flex-wrap gap-2 mt-3">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="secondary">{task.priority}</Badge>
                           <Badge
                             variant="outline"
                             className={cn(
-                              task.status === 'completed' ||
-                                task.status === 'done'
+                              task.status === 'completed' || task.status === 'done'
                                 ? 'border-green-500/30 text-green-400'
                                 : 'border-yellow-500/30 text-yellow-400'
                             )}
@@ -701,9 +708,7 @@ export default function StudentProfilePage({
 
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Due Date</p>
-                        <p className="text-sm font-medium">
-                          {task.due_date || 'No due date'}
-                        </p>
+                        <p className="text-sm font-medium">{task.due_date || 'No due date'}</p>
                       </div>
                     </div>
                   </CardContent>
